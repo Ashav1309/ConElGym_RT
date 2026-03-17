@@ -1,0 +1,51 @@
+# ConElGym_RT — базовый конфиг
+# Все модельные конфиги наследуют эти значения и переопределяют нужные
+
+experiment:
+  name: "base"                          # переопределяется в каждом конфиге
+  seed: 42
+
+data:
+  v2_root: "C:/Users/ashav/Desktop/ConElGym_v2"
+  train_videos:      "data/train/videos"
+  valid_videos:      "data/valid/videos"
+  test_videos:       "data/test/videos"
+  train_annotations: "data/train/annotations"
+  valid_annotations: "data/valid/annotations"
+  test_annotations:  "data/test/annotations"
+  features_dir:      "data/frame_features"  # локально, не в v2_root
+  frame_size: 224                        # H и W для resize
+
+model:
+  backbone: "mobilenet_v3_small"         # mobilenet_v3_small | efficientnet_b0
+  temporal_head: "per_frame_mlp"         # per_frame_mlp | bilstm | bilstm_attn | causal_tcn
+  hidden_dim: 128
+  n_layers: 2
+  dropout: 0.3
+  freeze_backbone_epochs: 5             # заморозка backbone первые N эпох
+
+training:
+  epochs: 50
+  batch_size: 1                         # 1 видео = 1 batch (TBPTT по чанкам внутри)
+  chunk_size: 256                       # кадров на TBPTT-чанк (~10s @ 25fps)
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  scheduler: "cosine"                   # cosine | step | none
+  grad_clip: 1.0
+  early_stopping_patience: 10          # эпох без улучшения valid mAP@0.5
+
+postprocess:
+  threshold: 0.5
+  min_duration_sec: 1.5
+  max_duration_sec: 12.0
+
+streaming:
+  threshold_high: 0.6
+  threshold_low: 0.3
+  patience_frames: 15
+  ema_alpha: 0.3
+  attn_window: 64                       # буфер attention при стриминге
+
+mlflow:
+  tracking_uri: "./mlruns"
+  experiment_name: "ConElGym_RT"

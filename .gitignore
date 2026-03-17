@@ -1,0 +1,80 @@
+# =============================================================================
+# ConElGym_RT .gitignore
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env/
+
+# PyTorch model checkpoints
+models/*.pt
+models/*.pth
+
+# Data — videos (referenced from ConElGym_v2, not stored here)
+data/frame_features/
+
+# Optuna HPO database
+*.db
+
+# MLflow
+mlruns/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
+logs/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff cache
+.ruff_cache/
+
+# Documentation (thesis notes, reports — tracked separately)
+docs/
+
+# Claude Code configuration
+CLAUDE.md
+.claude/
+
+# =============================================================================
+# Что ОТСЛЕЖИВАЕТСЯ в git:
+# - src/          (исходный код)
+# - tests/        (тесты)
+# - configs/      (YAML конфиги)
+# - docs/         (PRD, чеклисты, отчёты)
+# - requirements.txt
+# - README.md
+# - CLAUDE.md
+# =============================================================================
