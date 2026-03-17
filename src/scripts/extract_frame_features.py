@@ -31,7 +31,7 @@ from tqdm import tqdm
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.models.backbone import CNNBackbone  # noqa: E402
+from src.models.backbone import BACKBONE_CONFIGS, CNNBackbone  # noqa: E402
 
 # Нормализация ImageNet
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
@@ -162,7 +162,7 @@ def main() -> None:
                         choices=["train", "valid", "test", "all"],
                         help="Какой сплит обрабатывать")
     parser.add_argument("--backbone", default="mobilenet_v3_small",
-                        choices=list(CNNBackbone.__init__.__code__.co_varnames),
+                        choices=list(BACKBONE_CONFIGS.keys()),
                         help="Имя backbone")
     parser.add_argument("--out-dir", type=Path,
                         default=ROOT / "data" / "frame_features",
