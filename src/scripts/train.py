@@ -86,6 +86,7 @@ def evaluate_split(
         feats = sample.features.to(device)  # [T, D]
         logits = model.temporal(feats.unsqueeze(0)).squeeze(0)  # [T]
         scores = torch.sigmoid(logits).cpu()
+        del feats, logits
 
         dets = scores_to_detections(scores, sample.fps, threshold, min_dur, max_dur)
         for d in dets:
@@ -246,19 +247,10 @@ def train(config_path: Path, seed: int | None = None) -> None:
             n_chunks = 0
 
             for sample in train_ds.samples:
-                feats = sample.features.to(device)   # [T, D]
-                labels = sample.labels.to(device)    # [T]
-
-                # Backbone уже применён при извлечении признаков → temporal head
-                for chunk in train_ds.iter_tbptt_chunks(
-                    type("_", (), {  # type: ignore
-                        "features": feats,
-                        "labels":   labels,
-                    })(),
-                    chunk_size,
-                ):
-                    chunk_feat = chunk.features.unsqueeze(0)   # [1, L, D]
-                    chunk_lab  = chunk.labels.unsqueeze(0)     # [1, L]
+                # Держим фичи на CPU, переносим на GPU только чанки
+                for chunk in train_ds.iter_tbptt_chunks(sample, chunk_size):
+                    chunk_feat = chunk.features.unsqueeze(0).to(device)   # [1, L, D]
+                    chunk_lab  = chunk.labels.unsqueeze(0).to(device)     # [1, L]
 
                     # Temporal head forward (признаки уже извлечены)
                     logits = model.temporal(chunk_feat).squeeze(0)  # [L]
@@ -323,7 +315,7 @@ def train(config_path: Path, seed: int | None = None) -> None:
 
         tracker.log_params({"best_val_mAP_at_0.5": best_map})
         tracker.log_artifact(str(best_ckpt))
-        print(f"\nОбучение завершено. Лучший mAP@0.5={best_map:.3f} → {best_ckpt.name}")
+        print(f"\nTraining done. Best mAP@0.5={best_map:.3f} -> {best_ckpt.name}")
 
 
 def main() -> None:

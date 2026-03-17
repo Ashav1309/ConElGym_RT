@@ -78,6 +78,7 @@ def evaluate(
         logits = model.temporal(feats.unsqueeze(0)).squeeze(0)
         scores = torch.sigmoid(logits).cpu()
         total_frames += feats.shape[0]
+        del feats, logits
 
         dets = scores_to_detections(scores, sample.fps, threshold, min_dur, max_dur)
         for d in dets:
