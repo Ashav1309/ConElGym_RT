@@ -200,7 +200,7 @@ def train(config_path: Path, seed: int | None = None) -> None:
     # --- MLflow ---
     tracker = MLflowTracker(
         experiment_name=mlf_cfg["experiment_name"],
-        tracking_uri=str(ROOT / mlf_cfg["tracking_uri"]),
+        tracking_uri=(ROOT / mlf_cfg["tracking_uri"]).as_uri(),
     )
     exp_name = exp_cfg["name"]
     run_name = f"{exp_name}_seed{seed_val}"
@@ -293,13 +293,13 @@ def train(config_path: Path, seed: int | None = None) -> None:
                 )
 
                 tracker.log_metrics({
-                    "train_loss":     avg_loss,
-                    "val_mAP@0.5":    metrics.get("mAP@0.5", 0.0),
-                    "val_mAP@0.3":    metrics.get("mAP@0.3", 0.0),
-                    "val_mAP@0.7":    metrics.get("mAP@0.7", 0.0),
-                    "val_precision":  metrics.get("precision", 0.0),
-                    "val_recall":     rec,
-                    "val_BE":         be if not np.isnan(be) else 0.0,
+                    "train_loss":       avg_loss,
+                    "val_mAP_at_0.5":  metrics.get("mAP@0.5", 0.0),
+                    "val_mAP_at_0.3":  metrics.get("mAP@0.3", 0.0),
+                    "val_mAP_at_0.7":  metrics.get("mAP@0.7", 0.0),
+                    "val_precision":    metrics.get("precision", 0.0),
+                    "val_recall":       rec,
+                    "val_BE":           be if not np.isnan(be) else 0.0,
                 }, step=epoch)
 
                 if map50 > best_map:
@@ -312,7 +312,7 @@ def train(config_path: Path, seed: int | None = None) -> None:
                         "config":       cfg,
                         "val_metrics":  metrics,
                     }, best_ckpt)
-                    print(f"  ✓ Сохранён лучший чекпоинт (mAP@0.5={best_map:.3f})")
+                    print(f"  [+] Saved best checkpoint (mAP@0.5={best_map:.3f})")
                 else:
                     patience_counter += 5
                     if patience_counter >= patience:
@@ -321,7 +321,7 @@ def train(config_path: Path, seed: int | None = None) -> None:
             else:
                 tracker.log_metric("train_loss", avg_loss, step=epoch)
 
-        tracker.log_params({"best_val_mAP@0.5": best_map})
+        tracker.log_params({"best_val_mAP_at_0.5": best_map})
         tracker.log_artifact(str(best_ckpt))
         print(f"\nОбучение завершено. Лучший mAP@0.5={best_map:.3f} → {best_ckpt.name}")
 
