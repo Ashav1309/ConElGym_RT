@@ -1,0 +1,16 @@
+# Per-frame baseline: MobileNetV3-Small без temporal head
+experiment:
+  name: "mobilenet_v3_small"
+
+model:
+  backbone: "mobilenet_v3_small"
+  temporal_head: "per_frame_mlp"
+  hidden_dim: 256
+  dropout: 0.3
+  freeze_backbone_epochs: 5
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 15
