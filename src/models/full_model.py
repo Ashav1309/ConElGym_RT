@@ -41,9 +41,10 @@ def build_temporal_head(
             f"Доступные: {list(TEMPORAL_HEADS.keys())}"
         )
     cfg = dict(cfg)
-    # PerFrameMLP и CausalTCN не принимают n_layers
+    # PerFrameMLP и CausalTCN не принимают n_layers / hidden_dim
     if name in ("per_frame_mlp", "causal_tcn"):
         cfg.pop("n_layers", None)
+        cfg.pop("hidden_dim", None)
     cls = TEMPORAL_HEADS[name]
     return cls(input_dim=input_dim, **cfg)
 

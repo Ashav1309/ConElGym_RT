@@ -185,9 +185,10 @@ def train(config_path: Path, seed: int | None = None) -> None:
         "n_layers":   model_cfg.get("n_layers", 2),
         "dropout":    model_cfg.get("dropout", 0.3),
     }
-    # CausalTCN не принимает n_layers
+    # CausalTCN не принимает n_layers / hidden_dim
     if model_cfg["temporal_head"] == "causal_tcn":
         temporal_cfg.pop("n_layers", None)
+        temporal_cfg.pop("hidden_dim", None)
 
     model = GymRT(
         backbone_name=backbone,
