@@ -1,0 +1,16 @@
+# MobileNetV3-Small + BiLSTM + Attention temporal head
+experiment:
+  name: "mobilenet_v3_bilstm_attn"
+
+model:
+  backbone: "mobilenet_v3_small"
+  temporal_head: "bilstm_attn"
+  hidden_dim: 128
+  n_layers: 2
+  dropout: 0.3
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 10
