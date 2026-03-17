@@ -12,6 +12,7 @@ import argparse
 import random
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -30,6 +31,16 @@ from src.utils.metrics import (  # noqa: E402
 )
 from src.utils.postprocess import scores_to_detections  # noqa: E402
 from src.utils.tracking import MLflowTracker  # noqa: E402
+
+
+def _detach_state(state: Any) -> Any:
+    """Detach hidden state tensors to truncate TBPTT computation graph."""
+    if isinstance(state, torch.Tensor):
+        return state.detach()
+    if isinstance(state, (tuple, list)):
+        detached = tuple(_detach_state(s) for s in state)
+        return detached if isinstance(state, tuple) else list(detached)
+    return state
 
 
 def set_seed(seed: int) -> None:
@@ -210,7 +221,6 @@ def train(config_path: Path, seed: int | None = None) -> None:
     patience_counter = 0
     patience = train_cfg.get("early_stopping_patience", 10)
     chunk_size = train_cfg.get("chunk_size", 256)
-    freeze_epochs = model_cfg.get("freeze_backbone_epochs", 5)
 
     models_dir = ROOT / "models"
     models_dir.mkdir(exist_ok=True)
@@ -232,34 +242,37 @@ def train(config_path: Path, seed: int | None = None) -> None:
         tracker.set_tag("model_size_mb", f"{model.size_mb():.1f}")
 
         for epoch in range(1, train_cfg["epochs"] + 1):
-            # Разморозка backbone после freeze_epochs эпох
-            if epoch == freeze_epochs + 1:
-                model.unfreeze_backbone()
-                print(f"  [epoch {epoch}] Backbone размороженен")
-                # Добавляем параметры backbone в оптимизатор
-                optimizer.add_param_group({
-                    "params": model.backbone.parameters(),
-                    "lr": train_cfg["lr"] * 0.1,
-                })
+            # NOTE: backbone всегда заморожен при pre-extracted features.
+            # Разморозка backbone не используется — фичи кэшированы, backbone
+            # не участвует в forward/backward pass во время обучения.
 
             model.train()
             total_loss = 0.0
             n_chunks = 0
 
             for sample in train_ds.samples:
-                # Держим фичи на CPU, переносим на GPU только чанки
+                # TBPTT: передаём hidden state между чанками одного видео
+                hidden: Any = None
                 for chunk in train_ds.iter_tbptt_chunks(sample, chunk_size):
                     chunk_feat = chunk.features.unsqueeze(0).to(device)   # [1, L, D]
                     chunk_lab  = chunk.labels.unsqueeze(0).to(device)     # [1, L]
 
-                    # Temporal head forward (признаки уже извлечены)
-                    logits = model.temporal(chunk_feat).squeeze(0)  # [L]
-                    loss = criterion(logits, chunk_lab.squeeze(0))
+                    # forward_train возвращает (logits, new_state)
+                    logits, hidden = model.temporal.forward_train(chunk_feat, hidden)
+                    logits = logits.squeeze(0)  # [L]
+
+                    # Маскируем паддинг последнего чанка
+                    vl = chunk.valid_len
+                    loss = criterion(logits[:vl], chunk_lab.squeeze(0)[:vl])
 
                     optimizer.zero_grad()
                     loss.backward()
                     nn.utils.clip_grad_norm_(model.parameters(), train_cfg.get("grad_clip", 1.0))
                     optimizer.step()
+
+                    # Detach hidden state для TBPTT (обрываем граф, но передаём значения)
+                    if hidden is not None:
+                        hidden = _detach_state(hidden)
 
                     total_loss += loss.item()
                     n_chunks += 1
@@ -306,7 +319,7 @@ def train(config_path: Path, seed: int | None = None) -> None:
                     }, best_ckpt)
                     print(f"  [+] Saved best checkpoint (mAP@0.5={best_map:.3f})")
                 else:
-                    patience_counter += 5
+                    patience_counter += 1
                     if patience_counter >= patience:
                         print(f"  Early stopping на эпохе {epoch}")
                         break

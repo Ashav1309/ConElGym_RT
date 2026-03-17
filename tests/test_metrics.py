@@ -122,3 +122,78 @@ def test_precision_recall_no_predictions():
     p, r = compute_precision_recall([], gts)
     assert p == pytest.approx(0.0)
     assert r == pytest.approx(0.0)
+
+
+def test_precision_recall_no_ground_truths():
+    """Нет GT → precision=0, recall=0 (нечего вспоминать)."""
+    preds = [_make_pred("v1.mp4", 0.0, 10.0, 0.9)]
+    p, r = compute_precision_recall(preds, [], iou_threshold=0.5)
+    assert p == pytest.approx(0.0)
+    assert r == pytest.approx(0.0)
+
+
+def test_precision_recall_cross_video_no_match():
+    """Предсказание для video A не засчитывается как TP для GT из video B."""
+    preds = [_make_pred("videoA.mp4", 0.0, 10.0, 0.9)]
+    gts = [_make_gt("videoB.mp4", 0.0, 10.0)]
+    p, r = compute_precision_recall(preds, gts, iou_threshold=0.5)
+    assert p == pytest.approx(0.0)
+    assert r == pytest.approx(0.0)
+
+
+def test_precision_recall_same_gt_matched_once():
+    """Два предсказания не могут оба матчиться к одному GT — второе это FP."""
+    preds = [
+        _make_pred("v1.mp4", 0.0, 10.0, 0.95),  # TP
+        _make_pred("v1.mp4", 0.0, 10.0, 0.90),  # FP (GT уже занят)
+    ]
+    gts = [_make_gt("v1.mp4", 0.0, 10.0)]
+    p, r = compute_precision_recall(preds, gts, iou_threshold=0.5)
+    assert p == pytest.approx(0.5)  # 1 TP / 2 preds
+    assert r == pytest.approx(1.0)  # 1 TP / 1 GT
+
+
+def test_map_multiple_thresholds_returned():
+    """compute_map с несколькими порогами возвращает все ключи."""
+    preds = [_make_pred("v1.mp4", 0.0, 10.0, 1.0)]
+    gts = [_make_gt("v1.mp4", 0.0, 10.0)]
+    result = compute_map(preds, gts, iou_thresholds=[0.3, 0.5, 0.7])
+    assert "mAP@0.3" in result
+    assert "mAP@0.5" in result
+    assert "mAP@0.7" in result
+
+
+def test_map_default_thresholds():
+    """По умолчанию compute_map возвращает mAP@0.3, mAP@0.5, mAP@0.7."""
+    result = compute_map([], [])
+    assert set(result.keys()) == {"mAP@0.3", "mAP@0.5", "mAP@0.7"}
+
+
+def test_map_perfect_scores_all_thresholds():
+    """Идеальное предсказание даёт 1.0 на всех стандартных порогах."""
+    preds = [_make_pred("v1.mp4", 0.0, 10.0, 1.0)]
+    gts = [_make_gt("v1.mp4", 0.0, 10.0)]
+    result = compute_map(preds, gts)
+    assert result["mAP@0.3"] == pytest.approx(1.0)
+    assert result["mAP@0.5"] == pytest.approx(1.0)
+    assert result["mAP@0.7"] == pytest.approx(1.0)
+
+
+def test_boundary_error_only_start_wrong():
+    """Только start ошибочен → BE = start_err / 2."""
+    # start сдвинут на 2, end точный → BE = 1.0
+    assert compute_boundary_error((3.0, 5.0), (1.0, 5.0)) == pytest.approx(1.0)
+
+
+def test_boundary_error_only_end_wrong():
+    """Только end ошибочен → BE = end_err / 2."""
+    assert compute_boundary_error((1.0, 7.0), (1.0, 5.0)) == pytest.approx(1.0)
+
+
+def test_map_high_iou_threshold_misses_partial_overlap():
+    """Предсказание с IoU=0.5 пропускается при пороге 0.7."""
+    # pred=[0,10], gt=[5,15] → IoU = 5/15 ≈ 0.333 < 0.5
+    preds = [_make_pred("v1.mp4", 0.0, 10.0, 1.0)]
+    gts = [_make_gt("v1.mp4", 5.0, 15.0)]
+    result = compute_map(preds, gts, iou_thresholds=[0.5])
+    assert result["mAP@0.5"] == pytest.approx(0.0)

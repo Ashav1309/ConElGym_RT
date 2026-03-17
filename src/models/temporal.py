@@ -49,6 +49,10 @@ class PerFrameMLP(nn.Module):
         """Args: x [B, T, D] → logits [B, T]"""
         return self.net(x).squeeze(-1)
 
+    def forward_train(self, x: Tensor, state: Any) -> tuple[Tensor, None]:
+        """TBPTT-aware forward (no state for MLP). Returns (logits [B, T], None)."""
+        return self.net(x).squeeze(-1), None
+
     def forward_step(self, x: Tensor, state: Any) -> tuple[Tensor, None]:
         """Args: x [B, D] → (logit [B], None)"""
         return self.net(x).squeeze(-1), None
@@ -119,6 +123,20 @@ class BiLSTMHead(nn.Module):
         out, _ = self.bilstm(x)       # [B, T, hidden*2]
         out = self.dropout(out)
         return self.fc(out).squeeze(-1)
+
+    def forward_train(
+        self, x: Tensor, state: tuple[Tensor, Tensor] | None
+    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+        """TBPTT-aware forward: accepts and returns BiLSTM hidden state.
+
+        Enables threading hidden state between TBPTT chunks of the same video.
+        Note: BiLSTM uses bidirectional state — forward direction carries context,
+        backward direction resets at each chunk boundary (no future info available).
+        """
+        x = self.norm(x)
+        out, new_state = self.bilstm(x, state)  # [B, T, hidden*2]
+        out = self.dropout(out)
+        return self.fc(out).squeeze(-1), new_state
 
     def forward_step(
         self, x: Tensor, state: tuple[Tensor, Tensor] | None
@@ -220,6 +238,16 @@ class BiLSTMAttentionHead(nn.Module):
         attn_out = self.attention(lstm_out)    # [B, T, hidden*2]
         out = self.dropout(lstm_out + attn_out)
         return self.fc(out).squeeze(-1)
+
+    def forward_train(
+        self, x: Tensor, state: tuple[Tensor, Tensor] | None
+    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+        """TBPTT-aware forward: accepts and returns BiLSTM hidden state."""
+        x = self.norm(x)
+        lstm_out, new_state = self.bilstm(x, state)  # [B, T, hidden*2]
+        attn_out = self.attention(lstm_out)
+        out = self.dropout(lstm_out + attn_out)
+        return self.fc(out).squeeze(-1), new_state
 
     def forward_step(
         self,
@@ -339,6 +367,10 @@ class CausalTCNHead(nn.Module):
         x = self.tcn(x)                # [B, out_ch, T]
         x = x.transpose(1, 2)          # [B, T, out_ch]
         return self.fc(x).squeeze(-1)
+
+    def forward_train(self, x: Tensor, state: Any) -> tuple[Tensor, None]:
+        """TBPTT-aware forward (TCN is stateless). Returns (logits [B, T], None)."""
+        return self.forward(x), None
 
     def forward_step(self, x: Tensor, state: Any) -> tuple[Tensor, Any]:
         raise NotImplementedError(

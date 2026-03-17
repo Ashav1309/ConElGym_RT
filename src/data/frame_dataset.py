@@ -49,6 +49,7 @@ class TBPTTChunk:
     features: Tensor    # [chunk_size, D]
     labels: Tensor      # [chunk_size]  float32
     is_first: bool      # сбрасывать hidden state перед этим чанком
+    valid_len: int      # количество реальных кадров (остальное — padding)
 
 
 class FrameDataset(Dataset):
@@ -132,6 +133,7 @@ class FrameDataset(Dataset):
                 features=feat_chunk,
                 labels=lab_chunk,
                 is_first=(i == 0),
+                valid_len=(end - start),
             )
 
 

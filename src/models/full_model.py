@@ -124,9 +124,14 @@ class GymRT(nn.Module):
         return self.temporal.forward_step(feat, state)
 
     def init_state(self, batch_size: int = 1, device: torch.device | None = None) -> Any:
-        """Инициализирует hidden state для стриминга."""
+        """Инициализирует hidden state для стриминга.
+
+        Автоматически синхронизирует forward-веса BiLSTM → fwd_lstm перед стримингом.
+        """
         if device is None:
             device = next(self.parameters()).device
+        if hasattr(self.temporal, "_copy_fwd_weights"):
+            self.temporal._copy_fwd_weights()
         return self.temporal.init_state(batch_size, device)
 
     def count_parameters(self) -> int:
