@@ -35,6 +35,7 @@ CHECKPOINT_TO_CONFIG: dict[str, str] = {
     "efficientnet_b0_bilstm_attn":  "efficientnet_b0_bilstm_attn",
     "efficientnet_b0_bilstm":       "efficientnet_b0_bilstm",
     "efficientnet_b0_mlp":          "efficientnet_b0_mlp",
+    "efficientnet_b0_tcn":          "efficientnet_b0_tcn",
     # HPO-оптимальные версии
     "mobilenet_v3_small_opt":           "mobilenet_v3_small_opt",
     "mobilenet_v3_bilstm_opt":          "mobilenet_v3_bilstm_opt",
@@ -43,6 +44,7 @@ CHECKPOINT_TO_CONFIG: dict[str, str] = {
     "efficientnet_b0_bilstm_attn_opt":  "efficientnet_b0_bilstm_attn_opt",
     "efficientnet_b0_bilstm_opt":       "efficientnet_b0_bilstm_opt",
     "efficientnet_b0_mlp_opt":          "efficientnet_b0_mlp_opt",
+    "efficientnet_b0_tcn_opt":          "efficientnet_b0_tcn_opt",
 }
 
 

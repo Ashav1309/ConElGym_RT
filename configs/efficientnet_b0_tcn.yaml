@@ -1,0 +1,14 @@
+# EfficientNet-B0 + CausalTCN temporal head
+experiment:
+  name: "efficientnet_b0_tcn"
+
+model:
+  backbone: "efficientnet_b0"
+  temporal_head: "causal_tcn"
+  dropout: 0.2
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 10
