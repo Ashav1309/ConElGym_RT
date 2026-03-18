@@ -205,8 +205,10 @@ def make_plots(valid_rows: list[dict], test_rows: list[dict], plots_dir: Path) -
     valid_map = [r.get("mAP@0.5", 0) for r in valid_rows]
     test_map  = [r.get("mAP@0.5", 0) for r in test_rows]
     width = 0.35
-    ax.bar([i - width/2 for i in x], valid_map, width, label="Valid", color="#4C72B0")
-    ax.bar([i + width/2 for i in x], test_map,  width, label="Test",  color="#DD8452")
+    if valid_map and len(valid_map) == len(names):
+        ax.bar([i - width/2 for i in x], valid_map, width, label="Valid", color="#4C72B0")
+    if test_map and len(test_map) == len(names):
+        ax.bar([i + width/2 for i in x], test_map, width, label="Test", color="#DD8452")
     ax.axhline(0.75, color="red", linestyle="--", linewidth=1, label="PRD target (0.75)")
     ax.set_xticks(list(x))
     ax.set_xticklabels(names, rotation=20, ha="right", fontsize=9)
