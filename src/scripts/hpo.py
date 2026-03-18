@@ -247,7 +247,7 @@ def run_hpo(model_name: str, n_trials: int, seed: int) -> None:
     print(f"HPO: {model_name} | {n_trials} trials | device={device}")
 
     storage = optuna.storages.RDBStorage(
-        url=f"sqlite:///{ROOT / 'hpo_studies.db'}",
+        url=f"sqlite:///{ROOT / f'hpo_{model_name}.db'}",
         engine_kwargs={"connect_args": {"timeout": 30}},
     )
 
