@@ -1,5 +1,5 @@
 experiment:
-  name: mobilenet_v3_small_opt
+  name: efficientnet_b0_mlp_opt
   seed: 42
 data:
   v2_root: C:/Users/ashav/Desktop/ConElGym_v2
@@ -12,18 +12,18 @@ data:
   features_dir: data/frame_features
   frame_size: 224
 model:
-  backbone: mobilenet_v3_small
+  backbone: efficientnet_b0
   temporal_head: per_frame_mlp
   hidden_dim: 256
   n_layers: 2
-  dropout: 0.4439180596489341
+  dropout: 0.4295358760909885
   freeze_backbone_epochs: 5
 training:
   epochs: 50
   batch_size: 1
-  chunk_size: 465
-  lr: 0.001964575201905611
-  weight_decay: 2.8067750752934853e-05
+  chunk_size: 450
+  lr: 0.00020104338773107046
+  weight_decay: 0.00012236779150098678
   scheduler: cosine
   grad_clip: 1.0
   early_stopping_patience: 10
