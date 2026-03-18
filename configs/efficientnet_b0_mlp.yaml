@@ -1,0 +1,15 @@
+# EfficientNet-B0 + per-frame MLP (baseline с мощным backbone)
+experiment:
+  name: "efficientnet_b0_mlp"
+
+model:
+  backbone: "efficientnet_b0"
+  temporal_head: "per_frame_mlp"
+  hidden_dim: 256
+  dropout: 0.3
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 10
