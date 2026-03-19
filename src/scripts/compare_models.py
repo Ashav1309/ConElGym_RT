@@ -111,7 +111,7 @@ def evaluate_model(
     dummy = torch.zeros(1, 1, feat_dim, device=device)
     with torch.no_grad():
         for _ in range(5):
-            model(dummy)
+            model.temporal(dummy)
 
     import time
     t0 = time.perf_counter()

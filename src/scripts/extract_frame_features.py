@@ -31,7 +31,7 @@ from tqdm import tqdm
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.models.backbone import BACKBONE_CONFIGS, CNNBackbone  # noqa: E402
+from src.models.backbone import BACKBONE_CONFIGS, CNNBackbone
 
 # Нормализация ImageNet
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
@@ -61,8 +61,16 @@ def extract_video(
     device: torch.device,
     frame_size: int = 224,
     batch_size: int = 32,
+    frame_diff: bool = False,
+    tsm_mode: bool = False,
 ) -> tuple[torch.Tensor, float, int]:
     """Извлекает признаки из всех кадров видео.
+
+    Args:
+        frame_diff: если True — вход backbone = [I_t | I_t - I_{t-1}] (6 каналов).
+                    Для первого кадра разность = 0.
+        tsm_mode:   если True — всё видео подаётся как [T, C, H, W] одним проходом
+                    (TSM требует полного контекста для корректного временного сдвига).
 
     Returns:
         features: Tensor[F, D]
@@ -76,25 +84,70 @@ def extract_video(
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
 
     all_features: list[torch.Tensor] = []
-    batch: list[torch.Tensor] = []
 
-    def flush_batch() -> None:
-        if not batch:
-            return
-        x = torch.stack(batch).to(device)   # [B, 3, H, W]
-        feats = backbone(x)                  # [B, D]
-        all_features.append(feats.cpu())
-        batch.clear()
+    if tsm_mode:
+        # TSM: загружаем все кадры, подаём как [T, C, H, W] одним проходом
+        all_frames: list[torch.Tensor] = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            all_frames.append(preprocess_frame(frame, frame_size))
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        batch.append(preprocess_frame(frame, frame_size))
-        if len(batch) == batch_size:
-            flush_batch()
+        cap.release()
+        if not all_frames:
+            raise RuntimeError(f"Нет кадров в видео: {video_path}")
 
-    flush_batch()
+        x = torch.stack(all_frames).to(device)   # [T, 3, H, W]
+        feats = backbone(x)                        # [T, D]
+        return feats.cpu(), fps, feats.shape[0]
+
+    elif frame_diff:
+        # Последовательная обработка: нужен предыдущий кадр для разности
+        prev: torch.Tensor | None = None
+        batch_diff: list[torch.Tensor] = []
+
+        def flush_diff() -> None:
+            if not batch_diff:
+                return
+            x = torch.stack(batch_diff).to(device)  # [B, 6, H, W]
+            feats = backbone(x)                       # [B, D]
+            all_features.append(feats.cpu())
+            batch_diff.clear()
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            curr = preprocess_frame(frame, frame_size)          # [3, H, W]
+            diff = curr - prev if prev is not None else torch.zeros_like(curr)
+            batch_diff.append(torch.cat([curr, diff], dim=0))  # [6, H, W]
+            prev = curr
+            if len(batch_diff) == batch_size:
+                flush_diff()
+
+        flush_diff()
+    else:
+        batch: list[torch.Tensor] = []
+
+        def flush_batch() -> None:
+            if not batch:
+                return
+            x = torch.stack(batch).to(device)   # [B, 3, H, W]
+            feats = backbone(x)                  # [B, D]
+            all_features.append(feats.cpu())
+            batch.clear()
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            batch.append(preprocess_frame(frame, frame_size))
+            if len(batch) == batch_size:
+                flush_batch()
+
+        flush_batch()
+
     cap.release()
 
     if not all_features:
@@ -127,6 +180,8 @@ def process_split(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     backbone = CNNBackbone(backbone_name, frozen=True).to(device).eval()
+    frame_diff = backbone_name == "efficientnet_b0_framediff"
+    tsm_mode = backbone_name == "efficientnet_b0_tsm"
 
     print(f"\n=== {split.upper()} — {len(video_files)} видео | {backbone_name} ===")
 
@@ -140,7 +195,9 @@ def process_split(
             continue
         try:
             features, fps, n_frames = extract_video(
-                video_path, backbone, device, frame_size, batch_size
+                video_path, backbone, device, frame_size, batch_size,
+                frame_diff=frame_diff,
+                tsm_mode=tsm_mode,
             )
             torch.save({
                 "features":     features,
@@ -161,7 +218,7 @@ def main() -> None:
     parser.add_argument("--split", default="all",
                         choices=["train", "valid", "test", "all"],
                         help="Какой сплит обрабатывать")
-    parser.add_argument("--backbone", default="mobilenet_v3_small",
+    parser.add_argument("--backbone", default="efficientnet_b0",
                         choices=list(BACKBONE_CONFIGS.keys()),
                         help="Имя backbone")
     parser.add_argument("--out-dir", type=Path,
