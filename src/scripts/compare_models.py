@@ -22,9 +22,9 @@ import torch
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from src.data.frame_dataset import FrameDataset  # noqa: E402
-from src.models.full_model import GymRT  # noqa: E402
-from src.scripts.train import evaluate_split, load_config  # noqa: E402
+from src.data.frame_dataset import FrameDataset
+from src.models.full_model import GymRT
+from src.scripts.train import evaluate_split, load_config
 
 # Соответствие имён чекпоинтов → конфигов
 CHECKPOINT_TO_CONFIG: dict[str, str] = {
@@ -106,6 +106,12 @@ def evaluate_model(
     )
 
     model = load_model_from_checkpoint(checkpoint_path, cfg, device)
+
+    feat_dim = dataset.samples[0].features.shape[1]
+    dummy = torch.zeros(1, 1, feat_dim, device=device)
+    with torch.no_grad():
+        for _ in range(5):
+            model(dummy)
 
     import time
     t0 = time.perf_counter()
