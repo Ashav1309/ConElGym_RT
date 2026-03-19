@@ -16,10 +16,11 @@ import re
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")  # non-interactive backend; must be before pyplot import
 import matplotlib.pyplot as plt
+import mlflow
 import numpy as np
 
+matplotlib.use("Agg")
 matplotlib.rcParams.update({
     "font.family": "DejaVu Sans",
     "font.size": 10,
@@ -29,13 +30,11 @@ matplotlib.rcParams.update({
     "figure.dpi": 150,
     "savefig.dpi": 300,
     "savefig.bbox": "tight",
-    "axes.grid": False,   # managed manually per axis to avoid twinx double-grid
+    "axes.grid": False,
     "grid.alpha": 0.3,
     "axes.spines.top": False,
     "axes.spines.right": False,
 })
-
-import mlflow
 
 ROOT = Path(__file__).resolve().parents[2]
 PLOTS_DIR = ROOT / "data" / "plots" / "results"
@@ -132,7 +131,7 @@ def fig1_learning_curves_grid() -> list[dict]:
     for idx, (label, model_id, color) in enumerate(MODELS):
         ax = axes[idx]
         ax2 = ax.twinx()
-        ax2.set_visible(False)  # hidden by default; enabled only if mAP data exists
+        ax2.set_visible(False)
         ax.grid(True, alpha=0.3)
         ax2.grid(False)
 

@@ -146,10 +146,10 @@ def fig1_map_comparison() -> None:
     width = 0.35
     fig, ax = plt.subplots(figsize=(13, 6))
 
-    bars_v = ax.bar(x - width / 2, valid_map, width, label="Valid",
-                    color=colors, alpha=0.5, edgecolor="white")
-    bars_t = ax.bar(x + width / 2, test_map, width, label="Test",
-                    color=colors, alpha=0.90, edgecolor="white")
+    ax.bar(x - width / 2, valid_map, width, label="Valid",
+           color=colors, alpha=0.5, edgecolor="white")
+    ax.bar(x + width / 2, test_map, width, label="Test",
+           color=colors, alpha=0.90, edgecolor="white")
 
     ax.axhline(TARGET_MAP, color="red", linestyle="--", linewidth=1.2,
                label=f"PRD target (≥{TARGET_MAP})")
@@ -367,7 +367,7 @@ def fig5_multiseed() -> None:
          "Boundary Error: Mean ± Std (3 seeds)", (0.0, 1.2),
          TARGET_BE, f"PRD target ≤ {TARGET_BE}s"),
     ]:
-        bars = ax.bar(x, means, 0.55, color=colors, alpha=0.75, edgecolor="white")
+        ax.bar(x, means, 0.55, color=colors, alpha=0.75, edgecolor="white")
         ax.errorbar(x, means, yerr=stds,
                     fmt="none", color="black", capsize=8, linewidth=2)
 
