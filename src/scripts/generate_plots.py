@@ -59,16 +59,18 @@ PLOTS_DIR = ROOT / "data" / "plots" / "results"
 
 # fmt: off
 # name, map3, map5, map7, precision, recall, be, fps_k, size_mb, valid_map5
+# Источник: compare_models.py, seed=42, opt-конфиг, test split, RTX 5060 Ti
+# Дата последнего измерения: 2026-03-20
 MODELS_SEED42 = [
     # name                      map3   map5   map7   prec   rec    be     fps_k    size_mb  valid_map5
-    ("mv3_small",               0.000, 0.000, 0.000, 0.000, 0.000, None,  1908.3,  4.1,    0.091),
-    ("mv3_bilstm",              0.765, 0.771, 0.617, 0.658, 0.841, 0.310, 237.3,   9.7,    0.795),
-    ("mv3_bilstm_attn",         0.645, 0.687, 0.516, 0.691, 0.794, 0.380, 319.7,   10.6,   0.701),
-    ("mv3_tcn",                 0.690, 0.560, 0.338, 0.568, 0.698, 0.600, 534.4,   7.5,    0.560),
-    ("eff_b0_mlp",              0.182, 0.182, 0.091, 0.545, 0.159, 0.890, 1220.4,  16.5,   0.182),
-    ("eff_b0_bilstm",           0.874, 0.791, 0.762, 0.875, 0.857, 0.330, 147.4,   22.3,   0.894),
-    ("eff_b0_bilstm_attn",      0.857, 0.788, 0.750, 0.833, 0.889, 0.320, 10.1,    87.6,   0.895),
-    ("eff_b0_tcn",              0.977, 0.900, 0.863, 1.000, 1.000, 0.510, 405.4,   21.5,   0.810),
+    ("mv3_small",               0.000, 0.000, 0.000, 0.000, 0.000, None,  1908.3,  4.1,    0.091),  # base конфиг, FPS не переизмерен
+    ("mv3_bilstm",              0.771, 0.771, 0.750, 0.757, 0.841, 0.307, 220.8,   6.4,    0.795),
+    ("mv3_bilstm_attn",         0.762, 0.687, 0.565, 0.758, 0.794, 0.378, 260.3,   6.2,    0.701),
+    ("mv3_tcn",                 0.735, 0.560, 0.295, 0.595, 0.698, 0.598, 499.4,   7.5,    0.560),
+    ("eff_b0_mlp",              0.182, 0.182, 0.091, 0.667, 0.159, 0.894, 883.0,   16.5,   0.182),
+    ("eff_b0_bilstm",           0.791, 0.791, 0.774, 0.771, 0.857, 0.325, 191.8,   20.3,   0.894),
+    ("eff_b0_bilstm_attn",      0.853, 0.788, 0.774, 0.700, 0.889, 0.316, 7.8,     45.1,   0.895),
+    ("eff_b0_tcn",              0.900, 0.900, 0.708, 0.568, 1.000, 0.507, 345.1,   22.0,   0.810),
 ]
 # fmt: on
 
@@ -302,13 +304,6 @@ def fig4_fps_vs_map() -> None:
         ax.annotate(DISPLAY[name], (fps, map5),
                     textcoords="offset points", xytext=(8, 4),
                     fontsize=9, color="black")
-
-    # S3D референс (ConElGym_v2)
-    ax.scatter(18000, 0.993, s=200, color="#5C6BC0", marker="*",
-               edgecolors="black", linewidths=0.8, zorder=4)
-    ax.annotate("S3D+BiLSTM+Att\n(v2, offline)", (18000, 0.993),
-                textcoords="offset points", xytext=(8, -20),
-                fontsize=8.5, color="#5C6BC0", style="italic")
 
     ax.set_xscale("log")
     ax.set_xlabel("FPS (inference, RTX 5060 Ti, log scale)")
