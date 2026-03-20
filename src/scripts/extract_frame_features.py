@@ -86,21 +86,37 @@ def extract_video(
     all_features: list[torch.Tensor] = []
 
     if tsm_mode:
-        # TSM: загружаем все кадры, подаём как [T, C, H, W] одним проходом
-        all_frames: list[torch.Tensor] = []
+        # TSM: загружаем все кадры на CPU, обрабатываем чанками с 1-кадровым overlap.
+        # TSM сдвигает каналы на ±1 кадр, поэтому каждому кадру нужен 1 сосед.
+        # Добавляем 1 контекстный кадр с каждой стороны чанка, потом обрезаем.
+        TSM_CHUNK = 64  # кадров в чанке (64 × [3,224,224] ≈ 24 MB GPU)
+
+        all_frames_cpu: list[torch.Tensor] = []
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
-            all_frames.append(preprocess_frame(frame, frame_size))
+            all_frames_cpu.append(preprocess_frame(frame, frame_size))
 
         cap.release()
-        if not all_frames:
+        if not all_frames_cpu:
             raise RuntimeError(f"Нет кадров в видео: {video_path}")
 
-        x = torch.stack(all_frames).to(device)   # [T, 3, H, W]
-        feats = backbone(x)                        # [T, D]
-        return feats.cpu(), fps, feats.shape[0]
+        T_total = len(all_frames_cpu)
+        for start in range(0, T_total, TSM_CHUNK):
+            end = min(start + TSM_CHUNK, T_total)
+            # Расширяем контекст на ±1 кадр для корректного TSM-сдвига на границах
+            ctx_start = max(0, start - 1)
+            ctx_end = min(T_total, end + 1)
+            chunk = torch.stack(all_frames_cpu[ctx_start:ctx_end]).to(device)  # [C+, 3, H, W]
+            chunk_feats = backbone(chunk)                                         # [C+, D]
+            # Берём только валидные кадры (без контекстных)
+            valid_lo = start - ctx_start
+            valid_hi = end - ctx_start
+            all_features.append(chunk_feats[valid_lo:valid_hi].cpu())
+
+        features = torch.cat(all_features, dim=0)  # [T, D]
+        return features, fps, features.shape[0]
 
     elif frame_diff:
         # Последовательная обработка: нужен предыдущий кадр для разности

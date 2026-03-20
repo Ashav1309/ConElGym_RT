@@ -1,0 +1,16 @@
+# EfficientNet-B0 + Frame Difference + BiLSTM + Attention
+experiment:
+  name: "efficientnet_b0_framediff_bilstm_attn"
+
+model:
+  backbone: "efficientnet_b0_framediff"
+  temporal_head: "bilstm_attn"
+  hidden_dim: 128
+  n_layers: 2
+  dropout: 0.3
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 10
