@@ -45,6 +45,9 @@ CHECKPOINT_TO_CONFIG: dict[str, str] = {
     "efficientnet_b0_bilstm_opt":       "efficientnet_b0_bilstm_opt",
     "efficientnet_b0_mlp_opt":          "efficientnet_b0_mlp_opt",
     "efficientnet_b0_tcn_opt":          "efficientnet_b0_tcn_opt",
+    # Phase 5 — motion-aware backbones
+    "efficientnet_b0_framediff_bilstm_attn_opt": "efficientnet_b0_framediff_bilstm_attn_opt",
+    "efficientnet_b0_tsm_bilstm_attn_opt":       "efficientnet_b0_tsm_bilstm_attn_opt",
 }
 
 

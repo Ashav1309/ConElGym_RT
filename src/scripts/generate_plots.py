@@ -14,11 +14,13 @@
   Fig 9  — HPO before/after comparison
   Fig 10 — LOAO heatmap: 8 моделей × 4 снаряда
   Fig 11 — LOAO grouped bar: топ-3 модели × 4 снаряда
+  Fig 12 — Phase 5: LOAO сравнение baseline vs framediff vs TSM (eff_b0)
+  Fig 13 — Phase 5: FPS vs mAP scatter (Phase 3 + Phase 5 модели)
 
 Запуск:
     python src/scripts/generate_plots.py
 
-Выходные файлы: data/plots/results/fig{1..11}_*.png
+Выходные файлы: data/plots/results/fig{1..13}_*.png
 """
 
 from __future__ import annotations
@@ -101,6 +103,38 @@ LOAO = {
 TARGET_MAP = 0.75
 TARGET_BE  = 2.0   # PRD требование для RT (в секундах)
 TARGET_FPS = 25
+
+# ---------------------------------------------------------------------------
+# Phase 5 данные — motion-aware backbones (eff_b0 + bilstm_attn, seed=42)
+# Источник: compare_models.py, test split, RTX 5060 Ti
+# Дата измерения: 2026-03-21
+# ---------------------------------------------------------------------------
+
+# name, map5_test, be_test, recall_test, fps, size_mb, valid_map5
+PHASE5_MODELS = [
+    # name                             map5   be     recall fps_k   size_mb  valid_map5
+    ("eff_b0_bilstm_attn",             0.788, 0.316, 0.889, 7.8,    45.1,   0.895),  # Phase 3 baseline
+    ("eff_b0_framediff_bilstm_attn",   0.777, 0.260, 0.889, 9.0,    45.2,   0.894),  # Phase 5 framediff
+    ("eff_b0_tsm_bilstm_attn",         0.886, 0.250, 0.921, 13.1,   45.1,   0.896),  # Phase 5 TSM
+]
+
+PHASE5_LOAO = {
+    "eff_b0_bilstm_attn":           {"Ball": 0.785, "Clubs": 0.775, "Hoop": 0.636, "Ribbon": 0.800},  # Phase 3 baseline (LOAO seed42)
+    "eff_b0_framediff_bilstm_attn": {"Ball": 0.995, "Clubs": 0.966, "Hoop": 0.740, "Ribbon": 0.429},  # Phase 5 framediff
+    "eff_b0_tsm_bilstm_attn":       {"Ball": 1.000, "Clubs": 0.790, "Hoop": 0.903, "Ribbon": 0.621},  # Phase 5 TSM
+}
+
+PHASE5_DISPLAY = {
+    "eff_b0_bilstm_attn":           "EffB0+BiLSTM+Att\n(Phase 3 baseline)",
+    "eff_b0_framediff_bilstm_attn": "EffB0+FrameDiff\n+BiLSTM+Att",
+    "eff_b0_tsm_bilstm_attn":       "EffB0+TSM\n+BiLSTM+Att",
+}
+
+PHASE5_PALETTE = {
+    "eff_b0_bilstm_attn":           "#E53935",   # красный — лучшая Phase 3
+    "eff_b0_framediff_bilstm_attn": "#1565C0",   # синий
+    "eff_b0_tsm_bilstm_attn":       "#2E7D32",   # зелёный
+}
 
 PALETTE = {
     "mv3_small":        "#BDBDBD",
@@ -702,6 +736,134 @@ def fig11_loao_bar() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Fig 12 — Phase 5: LOAO сравнение baseline vs framediff vs TSM
+# ---------------------------------------------------------------------------
+
+def fig12_phase5_loao() -> None:
+    apparatus = ["Ball", "Clubs", "Hoop", "Ribbon"]
+    model_keys = list(PHASE5_LOAO.keys())
+    colors = [PHASE5_PALETTE[k] for k in model_keys]
+    labels = [PHASE5_DISPLAY[k] for k in model_keys]
+
+    n_app = len(apparatus)
+    n_models = len(model_keys)
+    width = 0.25
+    x = np.arange(n_app)
+    offsets = np.linspace(-(n_models - 1) * width / 2,
+                          (n_models - 1) * width / 2, n_models)
+
+    fig, (ax_bar, ax_mean) = plt.subplots(1, 2, figsize=(15, 6),
+                                           gridspec_kw={"width_ratios": [3, 1]})
+
+    # --- Left: grouped bar per apparatus ---
+    for i, (key, color, label) in enumerate(zip(model_keys, colors, labels)):
+        vals = [PHASE5_LOAO[key][a] for a in apparatus]
+        bars = ax_bar.bar(x + offsets[i], vals, width, color=color,
+                          alpha=0.85, edgecolor="white", linewidth=0.8, label=label)
+        for bar, val in zip(bars, vals):
+            check = "✓" if val >= 0.70 else "✗"
+            ax_bar.text(bar.get_x() + bar.get_width() / 2,
+                        val + 0.015, f"{val:.3f}\n{check}",
+                        ha="center", va="bottom", fontsize=8, fontweight="bold")
+
+    ax_bar.axhline(0.70, color="red", linestyle="--", linewidth=1.4,
+                   label="Criterion ≥ 0.70", zorder=3)
+    ax_bar.axhline(0.879, color="#5C6BC0", linestyle=":", linewidth=1.2,
+                   label="S3D v2 LOAO mean (0.879)", zorder=3)
+    ax_bar.set_xticks(x)
+    ax_bar.set_xticklabels(apparatus, fontsize=12)
+    ax_bar.set_xlabel("Apparatus (left-out fold)")
+    ax_bar.set_ylabel("mAP@IoU=0.5")
+    ax_bar.set_ylim(0.0, 1.15)
+    ax_bar.legend(fontsize=9, loc="lower right")
+    ax_bar.set_title("LOAO per Apparatus", fontweight="bold")
+
+    # --- Right: mean bar ---
+    means = [np.mean(list(PHASE5_LOAO[k].values())) for k in model_keys]
+    short_labels = ["Baseline\n(Ph3)", "FrameDiff", "TSM"]
+    bar_h = ax_mean.bar(short_labels, means, color=colors, alpha=0.85,
+                        edgecolor="white", width=0.5)
+    for bar, val in zip(bar_h, means):
+        ax_mean.text(bar.get_x() + bar.get_width() / 2,
+                     val + 0.015, f"{val:.3f}",
+                     ha="center", va="bottom", fontsize=10, fontweight="bold")
+    ax_mean.axhline(0.70, color="red", linestyle="--", linewidth=1.4)
+    ax_mean.axhline(0.879, color="#5C6BC0", linestyle=":", linewidth=1.2)
+    ax_mean.set_ylim(0.0, 1.15)
+    ax_mean.set_ylabel("LOAO Mean mAP@0.5")
+    ax_mean.set_title("LOAO Mean", fontweight="bold")
+
+    fig.suptitle(
+        "Figure 12. Phase 5: LOAO Cross-Validation — EfficientNet-B0 + BiLSTM+Attention\n"
+        "Baseline (Phase 3) vs Frame Difference vs TSM  |  seed=42  |  ✓ = ≥0.70",
+        fontsize=11,
+    )
+    fig.tight_layout()
+    _save(fig, "fig12_phase5_loao.png")
+
+
+# ---------------------------------------------------------------------------
+# Fig 13 — Phase 5: FPS vs mAP scatter (Phase 3 + Phase 5)
+# ---------------------------------------------------------------------------
+
+def fig13_phase5_fps_map() -> None:
+    fig, ax = plt.subplots(figsize=(12, 7))
+
+    ax.axvline(TARGET_FPS, color="green", linestyle="--", linewidth=1.5,
+               label=f"RT boundary (FPS={TARGET_FPS})", zorder=2)
+    ax.axhline(TARGET_MAP, color="red", linestyle="--", linewidth=1.2,
+               label=f"PRD mAP target ({TARGET_MAP})", zorder=2)
+    ax.fill_betweenx([TARGET_MAP, 1.05], TARGET_FPS, 2e6,
+                     alpha=0.06, color="green", label="RT + PRD zone")
+
+    # Phase 3 models (полупрозрачные, серые)
+    for m in MODELS_SEED42:
+        name, _, map5, _, _, _, be, fps_k, size_mb, _ = m
+        fps = fps_k * 1000
+        size = max(size_mb * 6, 30)
+        ax.scatter(fps, map5, s=size, color=PALETTE[name], alpha=0.35,
+                   edgecolors="gray", linewidths=0.6, zorder=2)
+        ax.annotate(DISPLAY[name], (fps, map5),
+                    textcoords="offset points", xytext=(6, 3),
+                    fontsize=8, color="gray", alpha=0.7)
+
+    # Phase 5 models (яркие, с outline)
+    for name, map5, be, recall, fps_k, size_mb, _ in PHASE5_MODELS:
+        fps = fps_k * 1000
+        size = max(size_mb * 6, 60)
+        color = PHASE5_PALETTE[name]
+        ax.scatter(fps, map5, s=size, color=color, alpha=0.95,
+                   edgecolors="black", linewidths=1.5, zorder=4, marker="D")
+        ax.annotate(PHASE5_DISPLAY[name].replace("\n", " "), (fps, map5),
+                    textcoords="offset points", xytext=(8, 5),
+                    fontsize=9, color=color, fontweight="bold")
+
+    ax.set_xscale("log")
+    ax.set_xlabel("FPS (inference, RTX 5060 Ti, log scale)")
+    ax.set_ylabel("mAP@IoU=0.5 (test, seed=42)")
+    ax.set_title(
+        "Figure 13. Phase 5: Accuracy–Efficiency Trade-off\n"
+        "Circles = Phase 3 models  |  Diamonds = Phase 5 (framediff, TSM)  |  bubble ∝ model size",
+        fontsize=11,
+    )
+    ax.set_ylim(-0.02, 1.1)
+
+    p3_patch = mpatches.Patch(color="gray", alpha=0.5, label="Phase 3 models")
+    p5_scatter = ax.scatter([], [], s=80, color="black", marker="D",
+                             edgecolors="black", label="Phase 5 models")
+    p5_handles = [
+        mpatches.Patch(color=PHASE5_PALETTE[k], label=PHASE5_DISPLAY[k].replace("\n", " "))
+        for k in PHASE5_LOAO.keys()
+    ]
+    leg1 = ax.legend(handles=[p3_patch, p5_scatter], loc="lower right", fontsize=9)
+    ax.add_artist(leg1)
+    ax.legend(handles=p5_handles, loc="upper left", fontsize=9, framealpha=0.9)
+
+    fig.tight_layout()
+    _save(fig, "fig13_phase5_fps_map.png")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -720,6 +882,8 @@ def main() -> None:
     fig9_hpo_comparison()
     fig10_loao_heatmap()
     fig11_loao_bar()
+    fig12_phase5_loao()
+    fig13_phase5_fps_map()
 
     print(f"\nDone. All figures saved to {PLOTS_DIR}")
 
