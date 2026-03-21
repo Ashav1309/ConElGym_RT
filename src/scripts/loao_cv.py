@@ -24,7 +24,9 @@ ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.data.frame_dataset import FrameDataset  # noqa: E402
+from src.data.pose_dataset import PoseDataset  # noqa: E402
 from src.models.full_model import GymRT  # noqa: E402
+from src.models.pose_model import PoseGymRT  # noqa: E402
 from src.scripts.train import (  # noqa: E402
     _detach_state,
     evaluate_split,
@@ -36,18 +38,20 @@ APPARATUS = ["Ball", "Clubs", "Hoop", "Ribbon"]
 
 
 def filter_by_apparatus(
-    dataset: FrameDataset, apparatus: str, keep: bool
-) -> FrameDataset:
-    """Возвращает новый FrameDataset с отфильтрованными samples.
+    dataset: FrameDataset | PoseDataset, apparatus: str, keep: bool
+) -> FrameDataset | PoseDataset:
+    """Возвращает копию датасета с отфильтрованными samples.
 
     Args:
-        dataset:    исходный датасет
-        apparatus:  имя снаряда (Ball/Clubs/Hoop/Ribbon)
-        keep:       True → оставить только этот снаряд, False → исключить
+        dataset:   исходный датасет (FrameDataset или PoseDataset)
+        apparatus: имя снаряда (Ball/Clubs/Hoop/Ribbon)
+        keep:      True → оставить только этот снаряд, False → исключить
     """
-    filtered = object.__new__(FrameDataset)
-    filtered.features_dir = dataset.features_dir
-    filtered.backbone = dataset.backbone
+    filtered = object.__new__(type(dataset))
+    # Копируем атрибуты, характерные для каждого типа
+    filtered.__dict__.update({
+        k: v for k, v in dataset.__dict__.items() if k != "samples"
+    })
     filtered.samples = [
         s for s in dataset.samples
         if (apparatus.lower() in s.video_name.lower()) == keep
@@ -57,16 +61,17 @@ def filter_by_apparatus(
 
 def train_one_fold(
     cfg: dict,
-    train_ds: FrameDataset,
-    valid_ds: FrameDataset,
+    train_ds: FrameDataset | PoseDataset,
+    valid_ds: FrameDataset | PoseDataset,
     device: torch.device,
     seed: int,
-) -> GymRT:
+) -> GymRT | PoseGymRT:
     """Обучает одну модель на одном фолде. Возвращает обученную модель."""
     set_seed(seed)
 
     model_cfg = cfg["model"]
     train_cfg = cfg["training"]
+    is_pose   = model_cfg.get("model_type") == "pose"
 
     pos_weight = torch.tensor(train_ds.pos_weight(), device=device)
 
@@ -75,16 +80,23 @@ def train_one_fold(
         "n_layers":   model_cfg.get("n_layers", 2),
         "dropout":    model_cfg.get("dropout", 0.3),
     }
-    if model_cfg["temporal_head"] == "causal_tcn":
+    if model_cfg.get("temporal_head") == "causal_tcn":
         temporal_cfg.pop("n_layers", None)
         temporal_cfg.pop("hidden_dim", None)
 
-    model = GymRT(
-        backbone_name=model_cfg["backbone"],
-        temporal_name=model_cfg["temporal_head"],
-        temporal_cfg=temporal_cfg,
-        frozen_backbone=True,
-    ).to(device)
+    if is_pose:
+        model = PoseGymRT(
+            hidden_dim=model_cfg.get("hidden_dim", 256),
+            temporal_name=model_cfg["temporal_head"],
+            temporal_cfg=temporal_cfg,
+        ).to(device)
+    else:
+        model = GymRT(
+            backbone_name=model_cfg["backbone"],
+            temporal_name=model_cfg["temporal_head"],
+            temporal_cfg=temporal_cfg,
+            frozen_backbone=True,
+        ).to(device)
 
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
@@ -155,35 +167,32 @@ def train_one_fold(
 def run_loao(config_path: Path, seed: int, eval_split: str) -> None:
     cfg = load_config(config_path, seed)
 
-    data_cfg = cfg["data"]
-    post_cfg = cfg["postprocess"]
+    data_cfg  = cfg["data"]
+    post_cfg  = cfg["postprocess"]
     feat_root = ROOT / data_cfg["features_dir"]
     v2_root   = Path(data_cfg["v2_root"])
-    backbone  = cfg["model"]["backbone"]
+    backbone  = cfg["model"].get("backbone", "")
+    is_pose   = cfg["model"].get("model_type") == "pose"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"LOAO CV | config={config_path.name} | seed={seed} | eval_split={eval_split}")
     print(f"Device: {device}")
 
     # Загружаем полные датасеты
-    full_train = FrameDataset(
-        feat_root / "train",
-        v2_root / data_cfg["train_annotations"],
-        backbone,
-    )
-    full_valid = FrameDataset(
-        feat_root / "valid",
-        v2_root / data_cfg["valid_annotations"],
-        backbone,
-    )
-    if eval_split == "test":
-        full_eval = FrameDataset(
-            feat_root / "test",
-            v2_root / data_cfg["test_annotations"],
-            backbone,
-        )
+    if is_pose:
+        pose_root = ROOT / data_cfg.get("pose_features_dir", "data/pose_features")
+        full_train = PoseDataset(pose_root / "train", v2_root / data_cfg["train_annotations"])
+        full_valid = PoseDataset(pose_root / "valid", v2_root / data_cfg["valid_annotations"])
+        full_eval = PoseDataset(pose_root / (eval_split if eval_split == "test" else "valid"),
+                                v2_root / data_cfg[f"{eval_split}_annotations"
+                                                   if eval_split == "test" else "valid_annotations"])
     else:
-        full_eval = full_valid
+        full_train = FrameDataset(feat_root / "train", v2_root / data_cfg["train_annotations"], backbone)
+        full_valid = FrameDataset(feat_root / "valid", v2_root / data_cfg["valid_annotations"], backbone)
+        if eval_split == "test":
+            full_eval = FrameDataset(feat_root / "test", v2_root / data_cfg["test_annotations"], backbone)
+        else:
+            full_eval = full_valid
 
     results: dict[str, float] = {}
 

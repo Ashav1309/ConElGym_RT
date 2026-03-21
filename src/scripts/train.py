@@ -23,7 +23,9 @@ ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.data.frame_dataset import FrameDataset  # noqa: E402
+from src.data.pose_dataset import PoseDataset  # noqa: E402
 from src.models.full_model import GymRT  # noqa: E402
+from src.models.pose_model import PoseGymRT  # noqa: E402
 from src.utils.metrics import (  # noqa: E402
     compute_boundary_error,
     compute_map,
@@ -162,18 +164,16 @@ def train(config_path: Path, seed: int | None = None) -> None:
     # --- Данные ---
     v2_root   = Path(data_cfg["v2_root"])
     feat_root = ROOT / data_cfg["features_dir"]
-    backbone  = model_cfg["backbone"]
+    backbone  = model_cfg.get("backbone", "")
+    is_pose   = model_cfg.get("model_type") == "pose"
 
-    train_ds = FrameDataset(
-        feat_root / "train",
-        v2_root / data_cfg["train_annotations"],
-        backbone,
-    )
-    valid_ds = FrameDataset(
-        feat_root / "valid",
-        v2_root / data_cfg["valid_annotations"],
-        backbone,
-    )
+    if is_pose:
+        pose_root = ROOT / data_cfg.get("pose_features_dir", "data/pose_features")
+        train_ds = PoseDataset(pose_root / "train", v2_root / data_cfg["train_annotations"])
+        valid_ds = PoseDataset(pose_root / "valid", v2_root / data_cfg["valid_annotations"])
+    else:
+        train_ds = FrameDataset(feat_root / "train", v2_root / data_cfg["train_annotations"], backbone)
+        valid_ds = FrameDataset(feat_root / "valid", v2_root / data_cfg["valid_annotations"], backbone)
 
     pos_weight = torch.tensor(train_ds.pos_weight(), device=device)
     print(f"Train: {len(train_ds)} videos | pos_weight={pos_weight.item():.1f}")
@@ -185,17 +185,23 @@ def train(config_path: Path, seed: int | None = None) -> None:
         "n_layers":   model_cfg.get("n_layers", 2),
         "dropout":    model_cfg.get("dropout", 0.3),
     }
-    # CausalTCN не принимает n_layers / hidden_dim
-    if model_cfg["temporal_head"] == "causal_tcn":
+    if model_cfg.get("temporal_head") == "causal_tcn":
         temporal_cfg.pop("n_layers", None)
         temporal_cfg.pop("hidden_dim", None)
 
-    model = GymRT(
-        backbone_name=backbone,
-        temporal_name=model_cfg["temporal_head"],
-        temporal_cfg=temporal_cfg,
-        frozen_backbone=True,
-    ).to(device)
+    if is_pose:
+        model = PoseGymRT(
+            hidden_dim=model_cfg.get("hidden_dim", 256),
+            temporal_name=model_cfg["temporal_head"],
+            temporal_cfg=temporal_cfg,
+        ).to(device)
+    else:
+        model = GymRT(
+            backbone_name=backbone,
+            temporal_name=model_cfg["temporal_head"],
+            temporal_cfg=temporal_cfg,
+            frozen_backbone=True,
+        ).to(device)
 
     print(f"Model params: {model.count_parameters():,}  |  Size: {model.size_mb():.1f} MB")
 

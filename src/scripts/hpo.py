@@ -26,7 +26,9 @@ ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.data.frame_dataset import FrameDataset  # noqa: E402
+from src.data.pose_dataset import PoseDataset  # noqa: E402
 from src.models.full_model import GymRT  # noqa: E402
+from src.models.pose_model import PoseGymRT  # noqa: E402
 from src.scripts.train import (  # noqa: E402
     _detach_state,
     evaluate_split,
@@ -114,18 +116,16 @@ def run_trial(
 
     feat_root = ROOT / data_cfg["features_dir"]
     v2_root   = Path(data_cfg["v2_root"])
-    backbone  = model_cfg["backbone"]
+    backbone  = model_cfg.get("backbone", "")
+    is_pose   = model_cfg.get("model_type") == "pose"
 
-    train_ds = FrameDataset(
-        feat_root / "train",
-        v2_root / data_cfg["train_annotations"],
-        backbone,
-    )
-    valid_ds = FrameDataset(
-        feat_root / "valid",
-        v2_root / data_cfg["valid_annotations"],
-        backbone,
-    )
+    if is_pose:
+        pose_root = ROOT / data_cfg.get("pose_features_dir", "data/pose_features")
+        train_ds = PoseDataset(pose_root / "train", v2_root / data_cfg["train_annotations"])
+        valid_ds = PoseDataset(pose_root / "valid", v2_root / data_cfg["valid_annotations"])
+    else:
+        train_ds = FrameDataset(feat_root / "train", v2_root / data_cfg["train_annotations"], backbone)
+        valid_ds = FrameDataset(feat_root / "valid", v2_root / data_cfg["valid_annotations"], backbone)
 
     pos_weight = torch.tensor(train_ds.pos_weight(), device=device)
 
@@ -134,16 +134,23 @@ def run_trial(
         "n_layers":   model_cfg.get("n_layers", 2),
         "dropout":    model_cfg.get("dropout", 0.3),
     }
-    if model_cfg["temporal_head"] == "causal_tcn":
+    if model_cfg.get("temporal_head") == "causal_tcn":
         temporal_cfg.pop("n_layers", None)
         temporal_cfg.pop("hidden_dim", None)
 
-    model = GymRT(
-        backbone_name=backbone,
-        temporal_name=model_cfg["temporal_head"],
-        temporal_cfg=temporal_cfg,
-        frozen_backbone=True,
-    ).to(device)
+    if is_pose:
+        model = PoseGymRT(
+            hidden_dim=model_cfg.get("hidden_dim", 256),
+            temporal_name=model_cfg["temporal_head"],
+            temporal_cfg=temporal_cfg,
+        ).to(device)
+    else:
+        model = GymRT(
+            backbone_name=backbone,
+            temporal_name=model_cfg["temporal_head"],
+            temporal_cfg=temporal_cfg,
+            frozen_backbone=True,
+        ).to(device)
 
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
