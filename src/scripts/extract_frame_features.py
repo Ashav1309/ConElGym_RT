@@ -196,8 +196,8 @@ def process_split(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     backbone = CNNBackbone(backbone_name, frozen=True).to(device).eval()
-    frame_diff = backbone_name == "efficientnet_b0_framediff"
-    tsm_mode = backbone_name == "efficientnet_b0_tsm"
+    frame_diff = "framediff" in backbone_name
+    tsm_mode = "_tsm" in backbone_name
 
     print(f"\n=== {split.upper()} — {len(video_files)} видео | {backbone_name} ===")
 

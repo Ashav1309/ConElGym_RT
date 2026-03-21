@@ -133,6 +133,45 @@ def wrap_mbconv_with_tsm(
     return module
 
 
+def wrap_inverted_residual_with_tsm(
+    module: nn.Module,
+    fold_div: int = 8,
+    bidirectional: bool = True,
+) -> nn.Module:
+    """Рекурсивно оборачивает все InvertedResidual блоки в TemporalShift.
+
+    Применяется к `features[1..11]` MobileNetV3-Small.
+    """
+    for name, child in module.named_children():
+        child_type = type(child).__name__
+        if child_type == "InvertedResidual":
+            setattr(module, name, TemporalShift(child, fold_div, bidirectional))
+        else:
+            wrap_inverted_residual_with_tsm(child, fold_div, bidirectional)
+    return module
+
+
+def build_tsm_mobilenet_v3_small(
+    fold_div: int = 8,
+    bidirectional: bool = True,
+) -> nn.Module:
+    """MobileNetV3-Small с TSM, обёрнутым вокруг всех InvertedResidual блоков.
+
+    Веса — ImageNet pretrained. TSM не добавляет параметров.
+    Вход: [T, C, H, W] — ОБЯЗАТЕЛЬНО полная последовательность для корректного сдвига.
+    """
+    from torchvision import models
+    from torchvision.models import MobileNet_V3_Small_Weights
+
+    full = models.mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+
+    # Оборачиваем блоки features[1..11] (InvertedResidual блоки)
+    for i in range(1, 12):
+        wrap_inverted_residual_with_tsm(full.features[i], fold_div, bidirectional)
+
+    return full
+
+
 def build_tsm_efficientnet_b0(
     fold_div: int = 8,
     bidirectional: bool = True,

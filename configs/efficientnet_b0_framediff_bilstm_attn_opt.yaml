@@ -15,15 +15,15 @@ model:
   backbone: efficientnet_b0_framediff
   temporal_head: bilstm_attn
   hidden_dim: 256
-  n_layers: 2
-  dropout: 0.3363231194086243
+  n_layers: 3
+  dropout: 0.395764469603033
   freeze_backbone_epochs: 5
 training:
   epochs: 50
   batch_size: 1
-  chunk_size: 435
-  lr: 0.00021199907323834753
-  weight_decay: 0.00014787463690880653
+  chunk_size: 368
+  lr: 0.00030595524002528915
+  weight_decay: 0.009662423922055153
   scheduler: cosine
   grad_clip: 1.0
   early_stopping_patience: 10

@@ -2,10 +2,13 @@
 CNN Backbone для извлечения признаков из кадров.
 
 Поддерживаемые backbone:
-  - mobilenet_v3_small        → output_dim=576
-  - mobilenet_v3_large        → output_dim=960
-  - efficientnet_b0           → output_dim=1280
-  - efficientnet_b0_framediff → output_dim=1280, вход 6 каналов [I_t | I_t - I_{t-1}]
+  - mobilenet_v3_small              → output_dim=576
+  - mobilenet_v3_large              → output_dim=960
+  - efficientnet_b0                 → output_dim=1280
+  - efficientnet_b0_framediff       → output_dim=1280, вход 6 каналов [I_t | I_t - I_{t-1}]
+  - mobilenet_v3_small_framediff    → output_dim=576,  вход 6 каналов [I_t | I_t - I_{t-1}]
+  - efficientnet_b0_tsm             → output_dim=1280, вход [T,C,H,W], TSM на MBConv блоках
+  - mobilenet_v3_small_tsm          → output_dim=576,  вход [T,C,H,W], TSM на InvertedResidual блоках
 
 Все веса — ImageNet pretrained.
 При frozen=True веса backbone не обновляются (используется при первых N эпохах).
@@ -45,11 +48,43 @@ BACKBONE_CONFIGS: dict[str, dict] = {
         "factory": None,   # создаётся в _build_framediff_backbone()
         "output_dim": 1280,
     },
+    "mobilenet_v3_small_framediff": {
+        "factory": None,   # создаётся в _build_mv3_framediff_backbone()
+        "output_dim": 576,
+    },
     "efficientnet_b0_tsm": {
         "factory": None,   # создаётся в tsm.build_tsm_efficientnet_b0()
         "output_dim": 1280,
     },
+    "mobilenet_v3_small_tsm": {
+        "factory": None,   # создаётся в tsm.build_tsm_mobilenet_v3_small()
+        "output_dim": 576,
+    },
 }
+
+
+def _build_mv3_framediff_backbone() -> nn.Module:
+    """MobileNetV3-Small с 6-канальным входом для frame difference.
+
+    Первые 3 канала — текущий кадр (веса из pretrained).
+    Следующие 3 — разность I_t - I_{t-1} (инициализированы нулями).
+    """
+    full = models.mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+
+    # features[0] = Conv2dNormActivation → [0] = Conv2d(3, 16, ...)
+    old_conv = full.features[0][0]
+    new_conv = nn.Conv2d(
+        6, old_conv.out_channels,
+        kernel_size=old_conv.kernel_size,
+        stride=old_conv.stride,
+        padding=old_conv.padding,
+        bias=old_conv.bias is not None,
+    )
+    with torch.no_grad():
+        new_conv.weight[:, :3] = old_conv.weight
+        new_conv.weight[:, 3:] = 0.0
+    full.features[0][0] = new_conv
+    return full
 
 
 def _build_framediff_backbone() -> nn.Module:
@@ -103,9 +138,14 @@ class CNNBackbone(nn.Module):
 
         if name == "efficientnet_b0_framediff":
             full_model = _build_framediff_backbone()
+        elif name == "mobilenet_v3_small_framediff":
+            full_model = _build_mv3_framediff_backbone()
         elif name == "efficientnet_b0_tsm":
-            from src.models.tsm import build_tsm_efficientnet_b0 
+            from src.models.tsm import build_tsm_efficientnet_b0
             full_model = build_tsm_efficientnet_b0()
+        elif name == "mobilenet_v3_small_tsm":
+            from src.models.tsm import build_tsm_mobilenet_v3_small
+            full_model = build_tsm_mobilenet_v3_small()
         else:
             full_model = BACKBONE_CONFIGS[name]["factory"]()
 
