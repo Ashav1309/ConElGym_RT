@@ -23,8 +23,9 @@ env/
 models/*.pt
 models/*.pth
 
-# Data — videos (referenced from ConElGym_v2, not stored here)
+# Data — extracted features (воспроизводимы скриптами)
 data/frame_features/
+data/pose_features/
 
 # Optuna HPO database
 *.db

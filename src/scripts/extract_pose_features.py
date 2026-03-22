@@ -29,6 +29,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import torch
+from mediapipe.tasks import python as mp_tasks
+from mediapipe.tasks.python import vision as mp_vision
 from tqdm import tqdm
 
 ROOT = Path(__file__).parent.parent.parent
@@ -40,6 +42,8 @@ SPLITS = {
     "valid": V2_ROOT / "data" / "valid" / "videos",
     "test":  V2_ROOT / "data" / "test"  / "videos",
 }
+
+MODEL_PATH = ROOT / "models" / "pose_landmarker_full.task"
 
 N_LANDMARKS = 33
 POSE_DIM = N_LANDMARKS * 3   # x, y, visibility
@@ -75,21 +79,47 @@ def normalize_landmarks(raw: np.ndarray) -> np.ndarray:
     return out
 
 
+def _build_detector() -> mp_vision.PoseLandmarker:
+    """Создаёт PoseLandmarker из Tasks API (mediapipe 0.10+), режим VIDEO.
+
+    VIDEO mode использует temporal tracking → быстрее IMAGE (~2× на длинных видео).
+    Один детектор на весь сплит с глобальными монотонными timestamp.
+    """
+    base_options = mp_tasks.BaseOptions(model_asset_path=str(MODEL_PATH))
+    options = mp_vision.PoseLandmarkerOptions(
+        base_options=base_options,
+        running_mode=mp_vision.RunningMode.VIDEO,
+        num_poses=1,
+        min_pose_detection_confidence=0.5,
+        min_pose_presence_confidence=0.5,
+        min_tracking_confidence=0.5,
+        output_segmentation_masks=False,
+    )
+    return mp_vision.PoseLandmarker.create_from_options(options)
+
+
 def extract_pose_video(
     video_path: Path,
-    pose_detector: mp.solutions.pose.Pose,  # type: ignore[name-defined]
-) -> tuple[torch.Tensor, float, int]:
+    detector: mp_vision.PoseLandmarker,
+    start_ts_ms: int = 0,
+) -> tuple[torch.Tensor, float, int, int]:
     """Извлекает pose-признаки из всех кадров видео.
+
+    Args:
+        start_ts_ms: начальный глобальный timestamp (мс) — монотонный счётчик
+                     поверх всех видео в сплите.
 
     Returns:
         features: Tensor[F, 99]
         fps: float
         total_frames: int
+        next_ts_ms: следующий глобальный timestamp для продолжения
     """
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
 
     all_features: list[np.ndarray] = []
+    frame_idx = 0
 
     while True:
         ret, frame_bgr = cap.read()
@@ -97,24 +127,31 @@ def extract_pose_video(
             break
 
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = pose_detector.process(frame_rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
-        if results.pose_landmarks:
-            raw = np.array([
-                [lm.x, lm.y, lm.visibility]
-                for lm in results.pose_landmarks.landmark
-            ], dtype=np.float32)  # [33, 3]
+        ts_ms = start_ts_ms + int(frame_idx * 1000.0 / fps)
+        result = detector.detect_for_video(mp_image, ts_ms)
+
+        if result.pose_landmarks:
+            lms = result.pose_landmarks[0]
+            raw = np.array(
+                [[lm.x, lm.y, lm.visibility] for lm in lms],
+                dtype=np.float32,
+            )  # [33, 3]
             norm = normalize_landmarks(raw)
         else:
-            # Нет человека на кадре → нули
             norm = np.zeros((N_LANDMARKS, 3), dtype=np.float32)
 
         all_features.append(norm.flatten())  # [99]
+        frame_idx += 1
 
     cap.release()
 
+    n_frames = len(all_features)
+    # +1 s gap between videos to reset tracking context
+    next_ts_ms = start_ts_ms + int(n_frames * 1000.0 / fps) + 1000
     features = torch.from_numpy(np.stack(all_features, axis=0))  # [F, 99]
-    return features, fps, features.shape[0]
+    return features, fps, n_frames, next_ts_ms
 
 
 def process_split(
@@ -132,27 +169,30 @@ def process_split(
     out_dir = out_root / split
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    mp_pose = mp.solutions.pose  # type: ignore[attr-defined]
-    pose = mp_pose.Pose(
-        static_image_mode=False,
-        model_complexity=1,
-        smooth_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
-    )
-
     print(f"\n=== {split.upper()} — {len(video_files)} видео | MediaPipe Pose ===")
 
     skipped = 0
     errors = 0
 
+    # Один детектор на весь сплит (VIDEO mode + глобальный timestamp)
+    detector = _build_detector()
+    global_ts_ms = 0
+
     for video_path in tqdm(video_files, desc=split, unit="video"):
         out_path = out_dir / f"{video_path.stem}.pt"
         if out_path.exists() and not force:
+            # Оцениваем длину, чтобы не сбить глобальный timestamp
+            cap_tmp = cv2.VideoCapture(str(video_path))
+            n = int(cap_tmp.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps_tmp = cap_tmp.get(cv2.CAP_PROP_FPS) or 25.0
+            cap_tmp.release()
+            global_ts_ms += int(n * 1000.0 / fps_tmp) + 1000
             skipped += 1
             continue
         try:
-            features, fps, n_frames = extract_pose_video(video_path, pose)
+            features, fps, n_frames, global_ts_ms = extract_pose_video(
+                video_path, detector, global_ts_ms
+            )
             torch.save({
                 "features":     features,
                 "fps":          fps,
@@ -162,9 +202,9 @@ def process_split(
             print(f"\n[ERROR] {video_path.name}: {exc}")
             errors += 1
 
-    pose.close()
-    print(f"  Сохранено: {len(video_files) - skipped - errors} | "
-          f"Пропущено: {skipped} | Ошибок: {errors}")
+    detector.close()
+    print(f"  Saved: {len(video_files) - skipped - errors} | "
+          f"Skipped: {skipped} | Errors: {errors}")
 
 
 def main() -> None:
