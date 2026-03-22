@@ -116,36 +116,39 @@ def extract_pose_video(
         next_ts_ms: следующий глобальный timestamp для продолжения
     """
     cap = cv2.VideoCapture(str(video_path))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+        all_features: list[np.ndarray] = []
+        frame_idx = 0
 
-    all_features: list[np.ndarray] = []
-    frame_idx = 0
+        while True:
+            ret, frame_bgr = cap.read()
+            if not ret:
+                break
 
-    while True:
-        ret, frame_bgr = cap.read()
-        if not ret:
-            break
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+            ts_ms = start_ts_ms + int(frame_idx * 1000.0 / fps)
+            result = detector.detect_for_video(mp_image, ts_ms)
 
-        ts_ms = start_ts_ms + int(frame_idx * 1000.0 / fps)
-        result = detector.detect_for_video(mp_image, ts_ms)
+            if result.pose_landmarks:
+                lms = result.pose_landmarks[0]
+                raw = np.array(
+                    [[lm.x, lm.y, lm.visibility] for lm in lms],
+                    dtype=np.float32,
+                )  # [33, 3]
+                norm = normalize_landmarks(raw)
+            else:
+                norm = np.zeros((N_LANDMARKS, 3), dtype=np.float32)
 
-        if result.pose_landmarks:
-            lms = result.pose_landmarks[0]
-            raw = np.array(
-                [[lm.x, lm.y, lm.visibility] for lm in lms],
-                dtype=np.float32,
-            )  # [33, 3]
-            norm = normalize_landmarks(raw)
-        else:
-            norm = np.zeros((N_LANDMARKS, 3), dtype=np.float32)
+            all_features.append(norm.flatten())  # [99]
+            frame_idx += 1
+    finally:
+        cap.release()
 
-        all_features.append(norm.flatten())  # [99]
-        frame_idx += 1
-
-    cap.release()
+    if not all_features:
+        raise ValueError(f"No frames decoded from {video_path}")
 
     n_frames = len(all_features)
     # +1 s gap between videos to reset tracking context
@@ -178,31 +181,39 @@ def process_split(
     detector = _build_detector()
     global_ts_ms = 0
 
-    for video_path in tqdm(video_files, desc=split, unit="video"):
-        out_path = out_dir / f"{video_path.stem}.pt"
-        if out_path.exists() and not force:
-            # Оцениваем длину, чтобы не сбить глобальный timestamp
-            cap_tmp = cv2.VideoCapture(str(video_path))
-            n = int(cap_tmp.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps_tmp = cap_tmp.get(cv2.CAP_PROP_FPS) or 25.0
-            cap_tmp.release()
-            global_ts_ms += int(n * 1000.0 / fps_tmp) + 1000
-            skipped += 1
-            continue
-        try:
-            features, fps, n_frames, global_ts_ms = extract_pose_video(
-                video_path, detector, global_ts_ms
-            )
-            torch.save({
-                "features":     features,
-                "fps":          fps,
-                "total_frames": n_frames,
-            }, out_path)
-        except Exception as exc:
-            print(f"\n[ERROR] {video_path.name}: {exc}")
-            errors += 1
+    try:
+        for video_path in tqdm(video_files, desc=split, unit="video"):
+            out_path = out_dir / f"{video_path.stem}.pt"
+            if out_path.exists() and not force:
+                # Читаем реальные total_frames/fps из кэша для точного advance timestamp
+                cached = torch.load(out_path, map_location="cpu", weights_only=True)
+                n = cached["total_frames"]
+                fps_tmp = cached["fps"]
+                global_ts_ms += int(n * 1000.0 / fps_tmp) + 1000
+                skipped += 1
+                continue
+            try:
+                features, fps, n_frames, global_ts_ms = extract_pose_video(
+                    video_path, detector, global_ts_ms
+                )
+                torch.save({
+                    "features":     features,
+                    "fps":          fps,
+                    "total_frames": n_frames,
+                }, out_path)
+            except Exception as exc:
+                print(f"\n[ERROR] {video_path.name}: {exc}")
+                errors += 1
+                # Сбрасываем детектор — иначе следующее видео получит неверный timestamp
+                try:
+                    detector.close()
+                except Exception:
+                    pass
+                detector = _build_detector()
+                global_ts_ms = 0
+    finally:
+        detector.close()
 
-    detector.close()
     print(f"  Saved: {len(video_files) - skipped - errors} | "
           f"Skipped: {skipped} | Errors: {errors}")
 

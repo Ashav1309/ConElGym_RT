@@ -99,18 +99,15 @@ def temporal_shift(
     T, C, H, W = x.shape
     fold = C // fold_div
 
-    out = x.clone()
-
     # Левый сдвиг: канал [t] ← канал [t-1]
-    out[1:, :fold] = x[:-1, :fold]
-    out[0,  :fold] = 0.0             # первый кадр не имеет предыдущего
+    left = torch.cat([x.new_zeros(1, fold, H, W), x[:-1, :fold]], dim=0)
 
     if bidirectional:
         # Правый сдвиг: канал [t] ← канал [t+1]
-        out[:-1, fold:2 * fold] = x[1:, fold:2 * fold]
-        out[-1,  fold:2 * fold] = 0.0  # последний кадр не имеет следующего
+        right = torch.cat([x[1:, fold:2 * fold], x.new_zeros(1, fold, H, W)], dim=0)
+        return torch.cat([left, right, x[:, 2 * fold:]], dim=1)
 
-    return out
+    return torch.cat([left, x[:, fold:]], dim=1)
 
 
 def wrap_mbconv_with_tsm(
@@ -159,15 +156,19 @@ def build_tsm_mobilenet_v3_small(
 
     Веса — ImageNet pretrained. TSM не добавляет параметров.
     Вход: [T, C, H, W] — ОБЯЗАТЕЛЬНО полная последовательность для корректного сдвига.
+
+    Примечание: в MobileNetV3 features[1..11] — это САМИ InvertedResidual (в отличие от
+    EfficientNet, где features[i] — Sequential, содержащий MBConv). Поэтому оборачиваем
+    напрямую, без рекурсии через wrap_inverted_residual_with_tsm.
     """
     from torchvision import models
     from torchvision.models import MobileNet_V3_Small_Weights
 
     full = models.mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.IMAGENET1K_V1)
 
-    # Оборачиваем блоки features[1..11] (InvertedResidual блоки)
+    # features[1..11] включительно — прямые InvertedResidual, заменяем напрямую
     for i in range(1, 12):
-        wrap_inverted_residual_with_tsm(full.features[i], fold_div, bidirectional)
+        full.features[i] = TemporalShift(full.features[i], fold_div, bidirectional)
 
     return full
 

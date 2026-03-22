@@ -115,9 +115,9 @@ class PoseDataset(Dataset):
             if pad > 0:
                 feat_chunk = torch.cat([
                     feat_chunk,
-                    torch.zeros(pad, POSE_DIM, device=feat_chunk.device),
+                    torch.zeros(pad, feat_chunk.shape[1], device=feat_chunk.device),
                 ], dim=0)
-                lab_chunk = torch.cat([lab_chunk, torch.zeros(pad)], dim=0)
+                lab_chunk = torch.cat([lab_chunk, torch.zeros(pad, device=lab_chunk.device)], dim=0)
 
             yield TBPTTChunk(
                 features=feat_chunk,

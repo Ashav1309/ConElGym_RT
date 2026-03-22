@@ -77,10 +77,7 @@ class PoseHead(nn.Module):
 
     def _project(self, x: Tensor) -> Tensor:
         """[B, T, 99] → [B, T, hidden_dim]"""
-        B, T, _ = x.shape
-        flat = x.view(B * T, -1)
-        projected = self.projection(flat)
-        return projected.view(B, T, -1)
+        return self.projection(x)
 
     def forward(self, x: Tensor) -> Tensor:
         """[B, T, 99] → logits [B, T]"""

@@ -4,7 +4,7 @@ experiment:
 
 model:
   backbone: "efficientnet_b0_framediff"
-  temporal_head: "tcn"
+  temporal_head: "causal_tcn"
   hidden_dim: 128
   n_layers: 2
   dropout: 0.3
