@@ -1,5 +1,5 @@
 experiment:
-  name: efficientnet_b0_framediff_tcn_opt
+  name: efficientnet_b0_tsm_bilstm_opt
   seed: 42
 data:
   v2_root: C:/Users/ashav/Desktop/ConElGym_v2
@@ -12,18 +12,18 @@ data:
   features_dir: data/frame_features
   frame_size: 224
 model:
-  backbone: efficientnet_b0_framediff
-  temporal_head: causal_tcn
-  hidden_dim: 128
+  backbone: efficientnet_b0_tsm
+  temporal_head: bilstm
+  hidden_dim: 256
   n_layers: 2
-  dropout: 0.21685785941408728
+  dropout: 0.4862528132298237
   freeze_backbone_epochs: 5
 training:
   epochs: 50
   batch_size: 1
-  chunk_size: 269
-  lr: 0.001095266274863256
-  weight_decay: 2.621087878265438e-05
+  chunk_size: 439
+  lr: 0.00012897950480855554
+  weight_decay: 0.007025166339242158
   scheduler: cosine
   grad_clip: 1.0
   early_stopping_patience: 10
