@@ -1,0 +1,38 @@
+# S3D RT-Reference — 3D backbone для сравнения в диссертации
+# Цель: показать, что 3D backbone обеспечивает лучшую точность (mAP=0.993, LOAO=0.879),
+# но нарушает RT-требование из-за низкого FPS.
+#
+# Модель НЕ обучается в RT — используется как reference point из Phase 3/4 (ConElGym_v2):
+#   mAP@0.5 = 0.993 (test), LOAO mean = 0.879 (seed=42)
+#   Checkpoint: ConElGym_v2/models/bilstm_attention_opt_seed42_best.pt
+#
+# FPS измеряется через: python src/scripts/measure_s3d_fps.py
+
+experiment:
+  name: "s3d_rt_reference"
+
+model:
+  backbone: "s3d"
+  temporal_head: "bilstm_attn"
+  hidden_dim: 256
+  n_layers: 2
+  dropout: 0.2
+
+# Параметры экстракции признаков (как в v2)
+s3d:
+  window_size: 16
+  stride: 8
+  frame_size: 224
+
+# Результаты из Phase 3/4 (ConElGym_v2) — не требуют повторного обучения
+reference_results:
+  valid_map: 0.996
+  test_map: 0.993
+  test_be: 0.489
+  test_recall: 1.000
+  test_precision: 0.779
+  loao_mean: 0.879
+  loao_ball: ~
+  loao_clubs: ~
+  loao_hoop: ~
+  loao_ribbon: ~

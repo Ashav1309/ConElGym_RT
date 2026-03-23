@@ -1,0 +1,17 @@
+# Pose-based BiLSTM — без CNN backbone
+# Вход: 33 MediaPipe ключевые точки × 3 = 99-dim
+experiment:
+  name: "pose_bilstm"
+
+model:
+  model_type: "pose"
+  temporal_head: "bilstm"
+  hidden_dim: 256
+  n_layers: 2
+  dropout: 0.3
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 10

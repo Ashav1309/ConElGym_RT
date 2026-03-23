@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Reruns for framediff TCN experiments (config bug fixed)
 set -e
 cd "$(dirname "$0")"
 source venv/Scripts/activate
@@ -15,4 +14,5 @@ run_experiment() {
     echo "=== DONE: $MODEL ==="
 }
 
-run_experiment efficientnet_b0_framediff_tcn
+run_experiment pose_bilstm
+run_experiment pose_causal_tcn
