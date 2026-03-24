@@ -16,11 +16,14 @@
   Fig 11 — LOAO grouped bar: топ-3 модели × 4 снаряда
   Fig 12 — Phase 5: LOAO сравнение baseline vs framediff vs TSM (eff_b0)
   Fig 13 — Phase 5: FPS vs mAP scatter (Phase 3 + Phase 5 модели)
+  Fig 14 — Phase 5: Accuracy vs Speed (все модели Phase 3+5+Pose+S3D)
+  Fig 15 — Phase 5: LOAO heatmap полный (17 моделей × 4 снаряда)
+  Fig 16 — Phase 5: LOAO mean bar chart (все архитектуры, threshold 0.70)
 
 Запуск:
     python src/scripts/generate_plots.py
 
-Выходные файлы: data/plots/results/fig{1..13}_*.png
+Выходные файлы: data/plots/results/fig{1..16}_*.png
 """
 
 from __future__ import annotations
@@ -134,6 +137,108 @@ PHASE5_PALETTE = {
     "eff_b0_bilstm_attn":           "#E53935",   # красный — лучшая Phase 3
     "eff_b0_framediff_bilstm_attn": "#1565C0",   # синий
     "eff_b0_tsm_bilstm_attn":       "#2E7D32",   # зелёный
+}
+
+# ---------------------------------------------------------------------------
+# Phase 5 FULL data — все модели (test split, _opt, compare_models.py 2026-03-24)
+# ---------------------------------------------------------------------------
+
+# (name, map5_test, fps, size_mb, category, display_label)
+PHASE5_FULL_MODELS = [
+    # Phase 3 — EfficientNet-B0
+    ("eff_b0_bilstm_attn_opt", 0.788,    17_675, 45.1, "Phase 3",       "EffB0+BiLSTM+Att"),
+    ("eff_b0_bilstm_opt",      0.791,   312_272, 20.3, "Phase 3",       "EffB0+BiLSTM"),
+    ("eff_b0_tcn_opt",         0.900,   853_053, 22.0, "Phase 3",       "EffB0+TCN"),
+    # Phase 3 — MobileNetV3-Small
+    ("mv3_bilstm_opt",         0.771,   334_270,  6.4, "Phase 3",       "MV3+BiLSTM"),
+    ("mv3_bilstm_attn_opt",    0.687,   423_406,  6.2, "Phase 3",       "MV3+BiLSTM+Att"),
+    # Phase 5 Framediff
+    ("eff_b0_framediff_bilstm_attn_opt", 0.777,  11_617, 53.1, "Framediff", "EffB0+FD+BiLSTM+Att"),
+    ("eff_b0_framediff_bilstm_opt",      0.785,  85_182, 27.6, "Framediff", "EffB0+FD+BiLSTM"),
+    ("eff_b0_framediff_tcn_opt",         0.784, 694_922, 22.0, "Framediff", "EffB0+FD+TCN"),
+    # Phase 5 TSM
+    ("eff_b0_tsm_bilstm_attn_opt", 0.886,  17_343, 45.1, "TSM", "EffB0+TSM+BiLSTM+Att"),
+    ("eff_b0_tsm_bilstm_opt",      0.886,  17_606, 41.3, "TSM", "EffB0+TSM+BiLSTM"),
+    ("eff_b0_tsm_tcn_opt",         0.866, 902_349, 22.0, "TSM", "EffB0+TSM+TCN"),
+    # Phase 5 Pose
+    ("pose_bilstm_attn_opt", 0.970,   310_922,  1.7, "Pose", "Pose+BiLSTM+Att"),
+    ("pose_bilstm_opt",      0.875,    17_852, 14.2, "Pose", "Pose+BiLSTM"),
+    ("pose_causal_tcn_opt",  0.982, 1_250_731,  2.8, "Pose", "Pose+CausalTCN"),
+    # S3D v2 (offline reference — FPS includes CNN+decode, not comparable to RT FPS)
+    ("s3d_v2",               0.993,       261.9, 30.2, "S3D (offline)", "S3D v2\n(offline)"),
+]
+
+PHASE5_CAT_COLORS = {
+    "Phase 3":       "#9E9E9E",   # серый
+    "Framediff":     "#1565C0",   # синий
+    "TSM":           "#2E7D32",   # зелёный
+    "Pose":          "#7B1FA2",   # фиолетовый
+    "S3D (offline)": "#E65100",   # оранжевый
+}
+
+# Full LOAO — все 17 протестированных моделей (seed=42, mAP@0.5 per apparatus)
+LOAO_FULL = {
+    # Phase 3
+    "eff_b0_bilstm_attn":           {"Ball": 0.720, "Clubs": 0.797, "Hoop": 0.636, "Ribbon": 0.800},
+    "eff_b0_bilstm":                {"Ball": 0.707, "Clubs": 0.818, "Hoop": 0.628, "Ribbon": 0.536},
+    "eff_b0_tcn":                   {"Ball": 0.303, "Clubs": 0.818, "Hoop": 0.527, "Ribbon": 0.713},
+    "mv3_bilstm_attn":              {"Ball": 0.776, "Clubs": 0.470, "Hoop": 0.697, "Ribbon": 0.447},
+    "mv3_bilstm":                   {"Ball": 0.588, "Clubs": 0.628, "Hoop": 0.588, "Ribbon": 0.361},
+    "mv3_tcn":                      {"Ball": 0.358, "Clubs": 0.535, "Hoop": 0.345, "Ribbon": 0.247},
+    # Phase 5 Framediff
+    "eff_b0_framediff_bilstm_attn": {"Ball": 0.995, "Clubs": 0.966, "Hoop": 0.740, "Ribbon": 0.429},
+    "eff_b0_framediff_bilstm":      {"Ball": 0.898, "Clubs": 0.893, "Hoop": 0.603, "Ribbon": 0.818},
+    "eff_b0_framediff_tcn":         {"Ball": 0.182, "Clubs": 0.545, "Hoop": 0.432, "Ribbon": 0.549},
+    "mv3_framediff_bilstm_attn":    {"Ball": 0.545, "Clubs": 0.628, "Hoop": 0.534, "Ribbon": 0.284},
+    "mv3_framediff_bilstm":         {"Ball": 0.621, "Clubs": 0.636, "Hoop": 0.420, "Ribbon": 0.403},
+    # Phase 5 TSM
+    "eff_b0_tsm_bilstm_attn":       {"Ball": 1.000, "Clubs": 0.790, "Hoop": 0.903, "Ribbon": 0.621},
+    "eff_b0_tsm_bilstm":            {"Ball": 0.946, "Clubs": 0.947, "Hoop": 0.819, "Ribbon": 0.545},
+    "eff_b0_tsm_tcn":               {"Ball": 0.779, "Clubs": 0.677, "Hoop": 0.597, "Ribbon": 0.282},
+    # Phase 5 Pose
+    "pose_bilstm_attn":             {"Ball": 0.989, "Clubs": 0.655, "Hoop": 1.000, "Ribbon": 1.000},
+    "pose_bilstm":                  {"Ball": 0.989, "Clubs": 0.903, "Hoop": 0.994, "Ribbon": 1.000},
+    "pose_causal_tcn":              {"Ball": 0.973, "Clubs": 0.989, "Hoop": 1.000, "Ribbon": 0.909},
+}
+
+LOAO_FULL_DISPLAY = {
+    "eff_b0_bilstm_attn":           "EffB0+BiLSTM+Att",
+    "eff_b0_bilstm":                "EffB0+BiLSTM",
+    "eff_b0_tcn":                   "EffB0+TCN",
+    "mv3_bilstm_attn":              "MV3+BiLSTM+Att",
+    "mv3_bilstm":                   "MV3+BiLSTM",
+    "mv3_tcn":                      "MV3+TCN",
+    "eff_b0_framediff_bilstm_attn": "EffB0+FD+BiLSTM+Att",
+    "eff_b0_framediff_bilstm":      "EffB0+FD+BiLSTM",
+    "eff_b0_framediff_tcn":         "EffB0+FD+TCN",
+    "mv3_framediff_bilstm_attn":    "MV3+FD+BiLSTM+Att",
+    "mv3_framediff_bilstm":         "MV3+FD+BiLSTM",
+    "eff_b0_tsm_bilstm_attn":       "EffB0+TSM+BiLSTM+Att",
+    "eff_b0_tsm_bilstm":            "EffB0+TSM+BiLSTM",
+    "eff_b0_tsm_tcn":               "EffB0+TSM+TCN",
+    "pose_bilstm_attn":             "Pose+BiLSTM+Att",
+    "pose_bilstm":                  "Pose+BiLSTM [PASS]",
+    "pose_causal_tcn":              "Pose+CausalTCN [PASS]",
+}
+
+LOAO_FULL_CATEGORY = {
+    "eff_b0_bilstm_attn":           "Phase 3",
+    "eff_b0_bilstm":                "Phase 3",
+    "eff_b0_tcn":                   "Phase 3",
+    "mv3_bilstm_attn":              "Phase 3",
+    "mv3_bilstm":                   "Phase 3",
+    "mv3_tcn":                      "Phase 3",
+    "eff_b0_framediff_bilstm_attn": "Framediff",
+    "eff_b0_framediff_bilstm":      "Framediff",
+    "eff_b0_framediff_tcn":         "Framediff",
+    "mv3_framediff_bilstm_attn":    "Framediff",
+    "mv3_framediff_bilstm":         "Framediff",
+    "eff_b0_tsm_bilstm_attn":       "TSM",
+    "eff_b0_tsm_bilstm":            "TSM",
+    "eff_b0_tsm_tcn":               "TSM",
+    "pose_bilstm_attn":             "Pose",
+    "pose_bilstm":                  "Pose",
+    "pose_causal_tcn":              "Pose",
 }
 
 PALETTE = {
@@ -864,6 +969,201 @@ def fig13_phase5_fps_map() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Fig 14 — Phase 5 full: Accuracy vs Speed (all Phase 3 + Phase 5 + S3D)
+# ---------------------------------------------------------------------------
+
+def fig14_p5_accuracy_vs_speed() -> None:
+    fig, ax = plt.subplots(figsize=(13, 8))
+
+    ax.axvline(TARGET_FPS, color="green", linestyle="--", linewidth=1.5,
+               label=f"RT boundary (≥{TARGET_FPS} FPS)", zorder=2)
+    ax.axhline(TARGET_MAP, color="red", linestyle="--", linewidth=1.2,
+               label=f"PRD mAP target (≥{TARGET_MAP})", zorder=2)
+    ax.fill_betweenx([TARGET_MAP, 1.05], TARGET_FPS, 2e7,
+                     alpha=0.05, color="green", label="RT + PRD zone")
+
+    legend_handles: list = []
+    for cat, color in PHASE5_CAT_COLORS.items():
+        legend_handles.append(mpatches.Patch(color=color, label=cat))
+
+    for name, map5, fps, size_mb, category, display in PHASE5_FULL_MODELS:
+        color = PHASE5_CAT_COLORS[category]
+        marker = "*" if category == "S3D (offline)" else ("D" if category == "Pose" else "o")
+        size = max(size_mb * 7, 40)
+        zorder = 5 if category in ("Pose", "S3D (offline)") else 3
+        ax.scatter(fps, map5, s=size, color=color, alpha=0.90,
+                   edgecolors="black", linewidths=0.9, zorder=zorder, marker=marker)
+        offset = (10, 6) if map5 > 0.85 else (8, 4)
+        ax.annotate(display, (fps, map5), textcoords="offset points",
+                    xytext=offset, fontsize=8.5,
+                    fontweight="bold" if category in ("Pose", "S3D (offline)") else "normal",
+                    color=color)
+
+    ax.set_xscale("log")
+    ax.set_xlabel("FPS (inference, RTX 5060 Ti, log scale)\n"
+                  "Note: Pose & 2D-CNN measured on pre-extracted features; "
+                  "S3D includes CNN+decode (not directly comparable)")
+    ax.set_ylabel("mAP@IoU=0.5 (test, seed=42)")
+    ax.set_title(
+        "Figure 14. Phase 5: Accuracy–Speed Trade-off — All Architectures\n"
+        "Phase 3 (gray circles) · Framediff (blue) · TSM (green) · Pose (purple diamonds) · S3D (orange star)",
+        fontsize=11,
+    )
+    ax.set_ylim(0.60, 1.08)
+
+    size_handles = [
+        ax.scatter([], [], s=6.4 * 7, color="gray", alpha=0.6,
+                   edgecolors="black", linewidths=0.5, label="~6 MB"),
+        ax.scatter([], [], s=22 * 7,  color="gray", alpha=0.6,
+                   edgecolors="black", linewidths=0.5, label="~22 MB"),
+        ax.scatter([], [], s=45 * 7,  color="gray", alpha=0.6,
+                   edgecolors="black", linewidths=0.5, label="~45 MB"),
+    ]
+    leg1 = ax.legend(handles=legend_handles, title="Architecture", loc="lower left",
+                     framealpha=0.9, fontsize=9)
+    ax.add_artist(leg1)
+    leg2 = ax.legend(handles=size_handles, title="Model size", loc="lower center",
+                     framealpha=0.9, fontsize=9)
+    ax.add_artist(leg2)
+    ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+
+    fig.tight_layout()
+    _save(fig, "fig14_p5_accuracy_vs_speed.png")
+
+
+# ---------------------------------------------------------------------------
+# Fig 15 — Phase 5 full: LOAO heatmap (17 models × 4 apparatus)
+# ---------------------------------------------------------------------------
+
+def fig15_p5_loao_heatmap_full() -> None:
+    apparatus = ["Ball", "Clubs", "Hoop", "Ribbon"]
+
+    # Ordered: Phase 3 (6) | Framediff (5) | TSM (3) | Pose (3)
+    model_keys = [
+        "eff_b0_bilstm_attn", "eff_b0_bilstm", "eff_b0_tcn",
+        "mv3_bilstm_attn", "mv3_bilstm", "mv3_tcn",
+        "eff_b0_framediff_bilstm_attn", "eff_b0_framediff_bilstm", "eff_b0_framediff_tcn",
+        "mv3_framediff_bilstm_attn", "mv3_framediff_bilstm",
+        "eff_b0_tsm_bilstm_attn", "eff_b0_tsm_bilstm", "eff_b0_tsm_tcn",
+        "pose_bilstm_attn", "pose_bilstm", "pose_causal_tcn",
+    ]
+    display_names = [LOAO_FULL_DISPLAY[k] for k in model_keys]
+
+    grid = np.array([[LOAO_FULL[k][a] for a in apparatus] for k in model_keys])
+    means = grid.mean(axis=1, keepdims=True)
+    full_grid = np.hstack([grid, means])
+    col_labels = apparatus + ["Mean"]
+
+    fig, ax = plt.subplots(figsize=(11, 10))
+    im = ax.imshow(full_grid, cmap="RdYlGn", vmin=0.0, vmax=1.0, aspect="auto")
+    plt.colorbar(im, ax=ax, label="mAP@IoU=0.5", fraction=0.03, pad=0.02)
+
+    ax.set_xticks(range(len(col_labels)))
+    ax.set_yticks(range(len(model_keys)))
+    ax.set_xticklabels(col_labels, fontsize=12, fontweight="bold")
+    ax.set_yticklabels(display_names, fontsize=9)
+    ax.set_xlabel("Apparatus (left-out fold)", fontsize=11)
+
+    # Cell annotations
+    for i in range(len(model_keys)):
+        for j in range(len(col_labels)):
+            val = full_grid[i, j]
+            text_color = "white" if val > 0.78 or val < 0.25 else "black"
+            marker = ""
+            if j < 4:
+                marker = " ✓" if val >= 0.70 else " ✗"
+            ax.text(j, i, f"{val:.2f}{marker}", ha="center", va="center",
+                    fontsize=8.5, fontweight="bold", color=text_color)
+
+    # Dividers between categories
+    # After row 5 (Phase3), after 10 (Framediff), after 13 (TSM)
+    for div_y in [5.5, 10.5, 13.5]:
+        ax.axhline(div_y, color="white", linewidth=2.5)
+    ax.axvline(3.5, color="white", linewidth=2.0)  # Mean column separator
+
+    # Category labels on left margin
+    cat_centers = {
+        "Phase 3\n(6 models)": 2.5,
+        "Framediff\n(5 models)": 8.0,
+        "TSM\n(3 models)": 12.0,
+        "Pose\n(3 models)": 15.5,
+    }
+    for label, cy in cat_centers.items():
+        ax.annotate(label, xy=(-0.7, cy), xycoords=("axes fraction", "data"),
+                    ha="right", va="center", fontsize=8,
+                    color="black", fontweight="bold",
+                    annotation_clip=False,
+                    xytext=(-5, 0), textcoords="offset points")
+
+    ax.set_title(
+        "Figure 15. Phase 5: LOAO Heatmap — All 17 Models\n"
+        "(✓ = fold passes ≥0.70 criterion; S3D v2 reference mean = 0.879, all ✓)",
+        fontsize=11, pad=10,
+    )
+    fig.tight_layout()
+    _save(fig, "fig15_p5_loao_heatmap_full.png")
+
+
+# ---------------------------------------------------------------------------
+# Fig 16 — Phase 5 full: LOAO mean bar chart (all architectures)
+# ---------------------------------------------------------------------------
+
+def fig16_p5_loao_mean_bar() -> None:
+    # Compute means and sort descending
+    entries = []
+    for key in LOAO_FULL:
+        vals = list(LOAO_FULL[key].values())
+        mean_val = np.mean(vals)
+        passes = all(v >= 0.70 for v in vals)
+        entries.append((key, mean_val, passes, LOAO_FULL_CATEGORY[key]))
+    entries.sort(key=lambda x: x[1], reverse=True)
+
+    names   = [LOAO_FULL_DISPLAY[e[0]] for e in entries]
+    means   = [e[1] for e in entries]
+    passes  = [e[2] for e in entries]
+    cats    = [e[3] for e in entries]
+    colors  = [PHASE5_CAT_COLORS[c] for c in cats]
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    x = np.arange(len(entries))
+    bars = ax.bar(x, means, color=colors, alpha=0.85, edgecolor="white", linewidth=0.8)
+
+    # Value labels + pass/fail
+    for i, (bar, val, ok) in enumerate(zip(bars, means, passes)):
+        symbol = " [P]" if ok else ""
+        ax.text(bar.get_x() + bar.get_width() / 2,
+                val + 0.012,
+                f"{val:.3f}{symbol}",
+                ha="center", va="bottom", fontsize=8.5, fontweight="bold",
+                color=PHASE5_CAT_COLORS[cats[i]])
+
+    ax.axhline(0.70, color="red", linestyle="--", linewidth=1.6,
+               label="LOAO criterion ≥ 0.70 (all apparatus)", zorder=3)
+    ax.axhline(0.879, color="#5C6BC0", linestyle=":", linewidth=1.3,
+               label="S3D v2 reference (offline, 0.879)", zorder=3)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=30, ha="right", fontsize=9)
+    ax.set_ylabel("LOAO Mean mAP@IoU=0.5 (across 4 apparatus folds)")
+    ax.set_ylim(0.0, 1.15)
+    ax.set_title(
+        "Figure 16. Phase 5: LOAO Mean — All Architectures (sorted by performance)\n"
+        "[PASS] = passes criterion (all 4 apparatus >= 0.70)  |  seed=42",
+        fontsize=11,
+    )
+
+    cat_handles = [mpatches.Patch(color=PHASE5_CAT_COLORS[c], label=c)
+                   for c in ["Phase 3", "Framediff", "TSM", "Pose"]]
+    leg1 = ax.legend(handles=cat_handles, title="Architecture", loc="upper right",
+                     framealpha=0.9, fontsize=9)
+    ax.add_artist(leg1)
+    ax.legend(loc="upper center", fontsize=9, framealpha=0.9)
+
+    fig.tight_layout()
+    _save(fig, "fig16_p5_loao_mean_bar.png")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -884,6 +1184,9 @@ def main() -> None:
     fig11_loao_bar()
     fig12_phase5_loao()
     fig13_phase5_fps_map()
+    fig14_p5_accuracy_vs_speed()
+    fig15_p5_loao_heatmap_full()
+    fig16_p5_loao_mean_bar()
 
     print(f"\nDone. All figures saved to {PLOTS_DIR}")
 
