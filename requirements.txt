@@ -10,3 +10,4 @@ mlflow>=2.12
 optuna>=3.6
 pytest>=8.0
 ruff>=0.4
+timm>=1.0

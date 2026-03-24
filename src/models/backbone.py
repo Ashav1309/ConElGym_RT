@@ -9,6 +9,7 @@ CNN Backbone для извлечения признаков из кадров.
   - mobilenet_v3_small_framediff    → output_dim=576,  вход 6 каналов [I_t | I_t - I_{t-1}]
   - efficientnet_b0_tsm             → output_dim=1280, вход [T,C,H,W], TSM на MBConv блоках
   - mobilenet_v3_small_tsm          → output_dim=576,  вход [T,C,H,W], TSM на InvertedResidual блоках
+  - mobilenetv4_conv_small          → output_dim=1280, timm (Google 2024, 2.5M params)
 
 Все веса — ImageNet pretrained.
 При frozen=True веса backbone не обновляются (используется при первых N эпохах).
@@ -60,7 +61,26 @@ BACKBONE_CONFIGS: dict[str, dict] = {
         "factory": None,   # создаётся в tsm.build_tsm_mobilenet_v3_small()
         "output_dim": 576,
     },
+    "mobilenetv4_conv_small": {
+        "factory": None,   # создаётся в _build_mv4_small_backbone()
+        "output_dim": 1280,  # после head conv + global avg pool
+    },
 }
+
+
+def _build_mv4_small_backbone() -> nn.Module:
+    """MobileNetV4-Conv-Small (timm, pretrained on ImageNet-1k).
+
+    2.5M параметров — легче EfficientNet-B0 (5.3M) при сопоставимом output_dim=1280.
+    timm с num_classes=0 и global_pool='avg' возвращает [B, 1280] из forward().
+    """
+    import timm
+    return timm.create_model(
+        "mobilenetv4_conv_small",
+        pretrained=True,
+        num_classes=0,
+        global_pool="avg",
+    )
 
 
 def _build_mv3_framediff_backbone() -> nn.Module:
@@ -146,11 +166,15 @@ class CNNBackbone(nn.Module):
         elif name == "mobilenet_v3_small_tsm":
             from src.models.tsm import build_tsm_mobilenet_v3_small
             full_model = build_tsm_mobilenet_v3_small()
+        elif name == "mobilenetv4_conv_small":
+            full_model = _build_mv4_small_backbone()
         else:
             full_model = BACKBONE_CONFIGS[name]["factory"]()
 
-        # Убираем classifier head
-        if name.startswith("mobilenet"):
+        # Убираем classifier head (timm-модели с num_classes=0 уже являются feature extractor)
+        if name == "mobilenetv4_conv_small":
+            self._timm_model = full_model   # forward() возвращает [B, output_dim] напрямую
+        elif name.startswith("mobilenet"):
             self.features = full_model.features
             self.avgpool = full_model.avgpool
         elif name.startswith("efficientnet"):
@@ -187,6 +211,8 @@ class CNNBackbone(nn.Module):
         Returns:
             [B, output_dim]
         """
+        if hasattr(self, "_timm_model"):
+            return self._timm_model(x)
         x = self.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
