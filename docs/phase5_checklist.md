@@ -1,94 +1,14 @@
-# Фаза 5: Apparatus-Adversarial Training & Advanced Experiments
+# Фаза 5: MobileNetV4 Backbone
 
-**Цель:** Обучить backbone извлекать apparatus-agnostic признаки. Исследовать fusion и современные backbone.
+**Цель:** Проверить, улучшает ли современный backbone (MobileNetV4, Google 2024) обобщаемость по снарядам (LOAO) по сравнению с EfficientNet-B0.
 
-**Предусловие:** Фаза 4 завершена, лучшая модель Phase 4 выбрана как базовая.
-
----
-
-## Идея (5.1 — DANN adversarial)
-
-К backbone добавляется adversarial голова — классификатор снаряда (4 класса: Ball/Clubs/Hoop/Ribbon).
-Backbone обучается одновременно:
-1. **Хорошо** предсказывать элемент (основной loss)
-2. **Плохо** предсказывать снаряд (adversarial loss через Gradient Reversal Layer)
-
-В итоге backbone вырабатывает признаки, из которых нельзя определить снаряд → apparatus-agnostic.
-
-```
-Backbone → f_t
-              ├── Temporal Head → element score   (основной loss: BCE)
-              └── GRL → Apparatus Classifier      (adversarial loss: CrossEntropy, веса инвертированы)
-```
+**Предусловие:** Фаза 4 завершена, лучшая модель Phase 4 выбрана как baseline.
 
 ---
 
-## Задача 5.1: Реализация DANN
+## Мотивация
 
-- [ ] **5.1.1** Реализовать `src/models/grl.py`:
-  - `GradientReversalLayer` — в forward: identity; в backward: умножить градиент на `-lambda`
-  - `lambda` растёт по schedule от 0 до 1 (как в оригинальном DANN)
-- [ ] **5.1.2** Реализовать `src/models/apparatus_classifier.py`:
-  - `ApparatusClassifier`: Linear(D→128) → ReLU → Linear(128→4)
-  - Принимает усреднённый по времени backbone output за чанк
-- [ ] **5.1.3** Модифицировать `src/scripts/train.py`: добавить режим `--adversarial`
-  - Суммарный loss: `L = L_element + alpha * L_apparatus_adversarial`
-  - `alpha` — гиперпараметр (поиск в HPO)
-- [ ] **5.1.4** Добавить apparatus label в `src/data/frame_dataset.py` (из имени файла: Ball/Clubs/Hoop/Ribbon)
-
----
-
-## Задача 5.2: Эксперименты DANN
-
-- [ ] **5.2.1** Создать `configs/eff_b0_adversarial_bilstm_attn_opt.yaml`
-  - Базовая архитектура: лучшая из Phase 4 + adversarial head
-- [ ] **5.2.2** HPO 20 trials (добавить `alpha` и `grl_lambda_max` в пространство поиска)
-- [ ] **5.2.3** Обучить seed=42
-- [ ] **5.2.4** Запустить LOAO
-- [ ] **5.2.5** Измерить FPS (adversarial head только при обучении, не при инференсе → FPS не меняется)
-
----
-
-## Задача 5.3: Графики и выводы DANN
-
-- [ ] **5.3.1** Добавить в scatter accuracy–speed из Phase 4
-- [ ] **5.3.2** Добавить в LOAO heatmap
-- [ ] **5.3.3** Обновить `docs/thesis_research_notes.md`
-- [ ] **5.3.4** Коммит: "Phase 5: apparatus-adversarial training"
-
----
-
-## Задача 5.4: Альтернативная гипотеза — Pose + Framediff fusion
-
-**Мотивация из Phase 4:**
-
-| Механизм | Ball | Clubs | Hoop | Ribbon | Слабое место |
-|----------|:----:|:-----:|:----:|:------:|:------------:|
-| eff_b0_framediff_bilstm_attn | 0.995 | **0.966** | 0.740 | 0.429 | Ribbon |
-| pose_bilstm_attn | 0.989 | 0.655 | **1.000** | **1.000** | Clubs |
-
-Pose закрывает Ribbon/Hoop через apparatus-agnostic скелет. Framediff даёт лучший Clubs (0.966) через motion channel. Комбинация может закрыть все 4 снаряда.
-
-**Архитектура:**
-```
-Pose features [F, 99]     → Linear(99→H)  ─┐
-Framediff features [F, D] → Linear(D→H)   ─┤→ concat → Linear(2H→H) → BiLSTM+Attn → logit
-```
-
-- [ ] **5.4.1** Реализовать `src/models/fusion_model.py` (два потока + concat + temporal head)
-- [ ] **5.4.2** Реализовать `src/data/fusion_dataset.py` (синхронная загрузка pose + framediff кэшей)
-- [ ] **5.4.3** Создать `configs/fusion_pose_framediff_bilstm_attn.yaml`
-- [ ] **5.4.4** Патч `train.py` / `hpo.py` / `loao_cv.py` для `model_type: "fusion"`
-- [ ] **5.4.5** HPO 20 trials
-- [ ] **5.4.6** Train seed=42
-- [ ] **5.4.7** LOAO — критерий: все 4 снаряда ≥ 0.70
-- [ ] **5.4.8** FPS measurement
-
----
-
-## Задача 5.5: Современный backbone — MobileNetV4
-
-**Мотивация:** MobileNetV4 (Google, 2024) — специально спроектирован для edge/RT задач. Превосходит EfficientNet-B0 по ImageNet при сопоставимой скорости. Позволяет ответить на вопрос: улучшает ли современный backbone обобщаемость (LOAO) по снарядам?
+MobileNetV4 (Google, 2024) — специально спроектирован для edge/RT задач. Превосходит EfficientNet-B0 по ImageNet при сопоставимой скорости.
 
 | Backbone | Параметры | ImageNet top-1 | Год | Библиотека |
 |----------|:---------:|:--------------:|:---:|:----------:|
@@ -98,26 +18,70 @@ Framediff features [F, D] → Linear(D→H)   ─┤→ concat → Linear(2H→H
 
 **Вариант для эксперимента:** `mobilenetv4_conv_medium` — лучший баланс accuracy/speed, превосходит eff_b0 по качеству признаков.
 
-- [ ] **5.5.1** Установить `timm`: `pip install timm`; добавить в `requirements.txt`
-- [ ] **5.5.2** Добавить `mobilenetv4_conv_medium` backbone в `src/models/backbone.py`:
+---
+
+## Задача 5.1: Подготовка backbone
+
+- [ ] **5.1.1** Установить `timm`: `pip install timm`; добавить в `requirements.txt`
+- [ ] **5.1.2** Добавить `mobilenetv4_conv_medium` backbone в `src/models/backbone.py`:
   - `timm.create_model('mobilenetv4_conv_medium.e500_r256_in1k', pretrained=True, num_classes=0)`
   - `output_dim=960` (после global avg pool)
-- [ ] **5.5.3** Извлечь фичи: `python src/scripts/extract_frame_features.py --backbone mobilenetv4_conv_medium --split all`
-- [ ] **5.5.4** Создать конфиг `configs/mobilenetv4_medium_bilstm_attn.yaml`
-- [ ] **5.5.5** HPO 20 trials
-- [ ] **5.5.6** Train seed=42
-- [ ] **5.5.7** LOAO — сравнить с eff_b0_bilstm_attn (0.739) и eff_b0_tsm_bilstm_attn (0.829)
-- [ ] **5.5.8** FPS measurement — сравнить с eff_b0
+- [ ] **5.1.3** Извлечь фичи: `python src/scripts/extract_frame_features.py --backbone mobilenetv4_conv_medium --split all`
+  - train=200 ✅, valid=68 ✅, test=68 ✅
 
-**Ожидаемый результат:** mAP выше или на уровне eff_b0; LOAO — открытый вопрос.
+---
+
+## Задача 5.2: Обучение
+
+- [ ] **5.2.1** Создать `configs/mv4_medium_bilstm_attn_opt.yaml`
+  - Базовая архитектура: BiLSTM+Attention (лучшая из Phase 3)
+  - `backbone: mobilenetv4_conv_medium`, `backbone_dim: 960`
+- [ ] **5.2.2** HPO 20 trials (пространство поиска идентично Phase 3)
+- [ ] **5.2.3** Обучить seed=42: зафиксировать mAP@{0.3,0.5,0.7}, Precision, Recall, BE
+
+---
+
+## Задача 5.3: Оценка
+
+- [ ] **5.3.1** LOAO — критерий: все 4 снаряда ≥ 0.70
+  - Сравнить с eff_b0_bilstm_attn (LOAO=0.739) и pose_causal_tcn (LOAO=0.968)
+- [ ] **5.3.2** FPS benchmark (e2e: decode + MV4 GPU + temporal):
+  - `python src/scripts/measure_fps_e2e.py` — добавить mv4_medium в список
+  - Сравнить с eff_b0 (~369 FPS)
+- [ ] **5.3.3** Записать результаты в `docs/comparison_table.md`
+
+---
+
+## Задача 5.4: Графики и выводы
+
+- [ ] **5.4.1** Добавить точку MV4 в scatter accuracy–speed (fig14)
+- [ ] **5.4.2** Добавить строку в LOAO heatmap (fig15)
+- [ ] **5.4.3** Обновить `docs/thesis_research_notes.md`
+- [ ] **5.4.4** Коммит: "Phase 5: MobileNetV4 backbone evaluation"
+
+---
+
+## Финальные метрики (заполнить)
+
+| Метрика | eff_b0_bilstm_attn | mv4_medium_bilstm_attn | Δ |
+|---------|--------------------|------------------------|---|
+| mAP@0.5 (valid) | 0.856 | | |
+| mAP@0.5 (test) | 0.788 | | |
+| LOAO Mean | 0.739 | | |
+| LOAO Ribbon | 0.800 | | |
+| FPS (e2e) | 358 | | |
+| Size MB | 26.5 | | |
 
 ---
 
 ## Критерии завершения Фазы 5
 
-- [ ] Adversarial модель (5.1–5.3) обучена и оценена
-- [ ] Fusion Pose+Framediff модель (5.4) обучена и оценена
-- [ ] MobileNetV4 backbone (5.5) протестирован
-- [ ] Лучший подход выбран как финальная модель
-- [ ] Результаты добавлены в финальные графики
-- [ ] `thesis_research_notes.md` обновлён с выводом
+- [ ] `mobilenetv4_conv_medium` backbone добавлен и проверен
+- [ ] Фичи извлечены для всех 3 сплитов (336 видео)
+- [ ] HPO завершён (20 trials)
+- [ ] seed=42 обучен, метрики зафиксированы
+- [ ] LOAO завершён (все 4 снаряда)
+- [ ] FPS измерен (e2e)
+- [ ] Результаты добавлены в графики и `thesis_research_notes.md`
+- [ ] `pytest tests/` — 0 ошибок
+- [ ] Коммит: "Phase 5: MobileNetV4 backbone evaluation"
