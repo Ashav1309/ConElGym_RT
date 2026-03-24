@@ -140,32 +140,35 @@ PHASE5_PALETTE = {
 }
 
 # ---------------------------------------------------------------------------
-# Phase 5 FULL data — все модели (test split, _opt, compare_models.py 2026-03-24)
+# Phase 5 FULL data — все модели (test split, _opt, 2026-03-24)
+# FPS: end-to-end (decode + backbone/MediaPipe + temporal), measure_fps_e2e.py
+#   CNN models: ~350–370 FPS (EfficientNet-B0 GPU + temporal head)
+#   Pose models: ~68 FPS (MediaPipe CPU bottleneck + temporal head)
+#   S3D: 261.9 FPS (from measure_s3d_fps.py, includes CNN+decode)
 # ---------------------------------------------------------------------------
 
 # (name, map5_test, fps, size_mb, category, display_label)
 PHASE5_FULL_MODELS = [
-    # Phase 3 — EfficientNet-B0
-    ("eff_b0_bilstm_attn_opt", 0.788,    17_675, 45.1, "Phase 3",       "EffB0+BiLSTM+Att"),
-    ("eff_b0_bilstm_opt",      0.791,   312_272, 20.3, "Phase 3",       "EffB0+BiLSTM"),
-    ("eff_b0_tcn_opt",         0.900,   853_053, 22.0, "Phase 3",       "EffB0+TCN"),
-    # Phase 3 — MobileNetV3-Small
-    ("mv3_bilstm_opt",         0.771,   334_270,  6.4, "Phase 3",       "MV3+BiLSTM"),
-    ("mv3_bilstm_attn_opt",    0.687,   423_406,  6.2, "Phase 3",       "MV3+BiLSTM+Att"),
-    # Phase 5 Framediff
-    ("eff_b0_framediff_bilstm_attn_opt", 0.777,  11_617, 53.1, "Framediff", "EffB0+FD+BiLSTM+Att"),
-    ("eff_b0_framediff_bilstm_opt",      0.785,  85_182, 27.6, "Framediff", "EffB0+FD+BiLSTM"),
-    ("eff_b0_framediff_tcn_opt",         0.784, 694_922, 22.0, "Framediff", "EffB0+FD+TCN"),
-    # Phase 5 TSM
-    ("eff_b0_tsm_bilstm_attn_opt", 0.886,  17_343, 45.1, "TSM", "EffB0+TSM+BiLSTM+Att"),
-    ("eff_b0_tsm_bilstm_opt",      0.886,  17_606, 41.3, "TSM", "EffB0+TSM+BiLSTM"),
-    ("eff_b0_tsm_tcn_opt",         0.866, 902_349, 22.0, "TSM", "EffB0+TSM+TCN"),
-    # Phase 5 Pose
-    ("pose_bilstm_attn_opt", 0.970,   310_922,  1.7, "Pose", "Pose+BiLSTM+Att"),
-    ("pose_bilstm_opt",      0.875,    17_852, 14.2, "Pose", "Pose+BiLSTM"),
-    ("pose_causal_tcn_opt",  0.982, 1_250_731,  2.8, "Pose", "Pose+CausalTCN"),
-    # S3D v2 (offline reference — FPS includes CNN+decode, not comparable to RT FPS)
-    ("s3d_v2",               0.993,       261.9, 30.2, "S3D (offline)", "S3D v2\n(offline)"),
+    # Phase 3 — EfficientNet-B0 (e2e FPS measured 2026-03-24)
+    ("eff_b0_bilstm_attn_opt", 0.788, 358, 45.1, "Phase 3",   "EffB0+BiLSTM+Att"),
+    ("eff_b0_bilstm_opt",      0.791, 368, 20.3, "Phase 3",   "EffB0+BiLSTM"),
+    ("eff_b0_tcn_opt",         0.900, 369, 22.0, "Phase 3",   "EffB0+TCN"),
+    # Phase 3 — MobileNetV3-Small (e2e FPS not measured; temporal-only as lower bound)
+    ("mv3_bilstm_opt",         0.771, None,  6.4, "Phase 3",  "MV3+BiLSTM"),
+    ("mv3_bilstm_attn_opt",    0.687, None,  6.2, "Phase 3",  "MV3+BiLSTM+Att"),
+    # Phase 5 Framediff (e2e FPS not measured; temporal-only as lower bound)
+    ("eff_b0_framediff_bilstm_attn_opt", 0.777, None, 53.1, "Framediff", "EffB0+FD+BiLSTM+Att"),
+    ("eff_b0_framediff_bilstm_opt",      0.785, None, 27.6, "Framediff", "EffB0+FD+BiLSTM"),
+    ("eff_b0_framediff_tcn_opt",         0.784, None, 22.0, "Framediff", "EffB0+FD+TCN"),
+    # Phase 5 TSM (e2e FPS measured 2026-03-24)
+    ("eff_b0_tsm_bilstm_attn_opt", 0.886, 349, 45.1, "TSM", "EffB0+TSM+BiLSTM+Att"),
+    ("eff_b0_tsm_bilstm_opt",      0.886, 354, 41.3, "TSM", "EffB0+TSM+BiLSTM"),
+    # Phase 5 Pose (e2e FPS measured 2026-03-24; bottleneck = MediaPipe CPU)
+    ("pose_bilstm_attn_opt", 0.970, 68, 1.7,  "Pose", "Pose+BiLSTM+Att"),
+    ("pose_bilstm_opt",      0.875, 68, 14.2, "Pose", "Pose+BiLSTM"),
+    ("pose_causal_tcn_opt",  0.982, 68, 2.8,  "Pose", "Pose+CausalTCN"),
+    # S3D v2 (offline, end-to-end — 16-frame buffer → latency=640ms)
+    ("s3d_v2",               0.993, 262, 30.2, "S3D (offline)", "S3D v2\n(offline)"),
 ]
 
 PHASE5_CAT_COLORS = {
@@ -987,6 +990,8 @@ def fig14_p5_accuracy_vs_speed() -> None:
         legend_handles.append(mpatches.Patch(color=color, label=cat))
 
     for name, map5, fps, size_mb, category, display in PHASE5_FULL_MODELS:
+        if fps is None:
+            continue  # skip models without e2e FPS measurement
         color = PHASE5_CAT_COLORS[category]
         marker = "*" if category == "S3D (offline)" else ("D" if category == "Pose" else "o")
         size = max(size_mb * 7, 40)
@@ -1000,14 +1005,16 @@ def fig14_p5_accuracy_vs_speed() -> None:
                     color=color)
 
     ax.set_xscale("log")
-    ax.set_xlabel("FPS (inference, RTX 5060 Ti, log scale)\n"
-                  "Note: Pose & 2D-CNN measured on pre-extracted features; "
-                  "S3D includes CNN+decode (not directly comparable)")
+    ax.set_xlabel("End-to-end FPS (decode + backbone + temporal, RTX 5060 Ti, log scale)\n"
+                  "CNN: EfficientNet-B0 GPU (~350 FPS)  |  "
+                  "Pose: MediaPipe CPU bottleneck (~68 FPS)  |  "
+                  "S3D: CNN+decode (~262 FPS, but 640ms latency)")
     ax.set_ylabel("mAP@IoU=0.5 (test, seed=42)")
     ax.set_title(
-        "Figure 14. Phase 5: Accuracy–Speed Trade-off — All Architectures\n"
-        "Phase 3 (gray circles) · Framediff (blue) · TSM (green) · Pose (purple diamonds) · S3D (orange star)",
-        fontsize=11,
+        "Figure 14. Phase 5: Accuracy–Speed Trade-off — End-to-End FPS\n"
+        "Phase 3 (gray circles) · TSM (green) · Pose (purple diamonds) · S3D (orange star)\n"
+        "FPS measured: decode + backbone/MediaPipe + temporal  |  Ball_001.mp4, RTX 5060 Ti",
+        fontsize=10,
     )
     ax.set_ylim(0.60, 1.08)
 
