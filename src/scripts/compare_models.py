@@ -23,7 +23,9 @@ ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.data.frame_dataset import FrameDataset
+from src.data.pose_dataset import PoseDataset
 from src.models.full_model import GymRT
+from src.models.pose_model import PoseGymRT
 from src.scripts.train import evaluate_split, load_config
 
 # Соответствие имён чекпоинтов → конфигов
@@ -45,9 +47,17 @@ CHECKPOINT_TO_CONFIG: dict[str, str] = {
     "efficientnet_b0_bilstm_opt":       "efficientnet_b0_bilstm_opt",
     "efficientnet_b0_mlp_opt":          "efficientnet_b0_mlp_opt",
     "efficientnet_b0_tcn_opt":          "efficientnet_b0_tcn_opt",
-    # Phase 5 — motion-aware backbones
+    # Phase 5 — motion-aware backbones (eff_b0)
     "efficientnet_b0_framediff_bilstm_attn_opt": "efficientnet_b0_framediff_bilstm_attn_opt",
     "efficientnet_b0_tsm_bilstm_attn_opt":       "efficientnet_b0_tsm_bilstm_attn_opt",
+    "efficientnet_b0_framediff_bilstm_opt":      "efficientnet_b0_framediff_bilstm_opt",
+    "efficientnet_b0_tsm_bilstm_opt":            "efficientnet_b0_tsm_bilstm_opt",
+    "efficientnet_b0_framediff_tcn_opt":         "efficientnet_b0_framediff_tcn_opt",
+    "efficientnet_b0_tsm_tcn_opt":               "efficientnet_b0_tsm_tcn_opt",
+    # Phase 5 — Pose-based
+    "pose_bilstm_attn_opt": "pose_bilstm_attn_opt",
+    "pose_bilstm_opt":      "pose_bilstm_opt",
+    "pose_causal_tcn_opt":  "pose_causal_tcn_opt",
 }
 
 
@@ -86,6 +96,78 @@ def load_model_from_checkpoint(
     model.load_state_dict(ckpt["model_state"])
     model.eval()
     return model
+
+
+def is_pose_config(cfg: dict) -> bool:
+    return cfg.get("model", {}).get("model_type") == "pose"
+
+
+def load_pose_model_from_checkpoint(
+    checkpoint_path: Path,
+    cfg: dict,
+    device: torch.device,
+) -> PoseGymRT:
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
+    # Читаем реальные HP из чекпоинта (не из yaml — yaml может иметь дефолты)
+    ckpt_model_cfg = ckpt.get("config", {}).get("model", cfg["model"])
+    temporal_cfg: dict = {
+        "hidden_dim": ckpt_model_cfg.get("hidden_dim", 256),
+        "n_layers":   ckpt_model_cfg.get("n_layers", 2),
+        "dropout":    ckpt_model_cfg.get("dropout", 0.3),
+    }
+    model = PoseGymRT(
+        hidden_dim=ckpt_model_cfg.get("hidden_dim", 256),
+        temporal_name=ckpt_model_cfg.get("temporal_head", "bilstm_attn"),
+        temporal_cfg=temporal_cfg,
+    ).to(device)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    return model
+
+
+def evaluate_pose_model(
+    checkpoint_path: Path,
+    cfg: dict,
+    device: torch.device,
+    split: str,
+) -> dict:
+    data_cfg = cfg["data"]
+    post_cfg = cfg["postprocess"]
+    pose_root = ROOT / "data" / "pose_features"
+    v2_root   = Path(data_cfg["v2_root"])
+
+    ann_key = f"{split}_annotations"
+    dataset = PoseDataset(
+        pose_root / split,
+        v2_root / data_cfg[ann_key],
+    )
+
+    if not dataset.samples:
+        return {"fps": 0.0, "size_mb": 0.0, "params": 0}
+
+    model = load_pose_model_from_checkpoint(checkpoint_path, cfg, device)
+
+    # GPU warm-up (как в evaluate_model для CNN)
+    feat_dim = dataset.samples[0].features.shape[1]
+    dummy = torch.zeros(1, 1, feat_dim, device=device)
+    with torch.no_grad():
+        for _ in range(5):
+            model.temporal(dummy)
+
+    import time
+    t0 = time.perf_counter()
+    metrics = evaluate_split(
+        model, dataset, device,
+        post_cfg["threshold"],
+        post_cfg["min_duration_sec"],
+        post_cfg["max_duration_sec"],
+    )
+    elapsed = time.perf_counter() - t0
+    total_frames = sum(s.features.shape[0] for s in dataset.samples)
+    metrics["fps"] = total_frames / elapsed if elapsed > 0 else 0.0
+    metrics["size_mb"] = model.size_mb()
+    metrics["params"] = model.count_parameters()
+    return metrics
 
 
 def evaluate_model(
@@ -317,7 +399,10 @@ def run_comparison(
                 print(f"  [WARN] Нет аннотаций для split={split}")
                 continue
             try:
-                metrics = evaluate_model(ckpt_path, cfg, device, split)
+                if is_pose_config(cfg):
+                    metrics = evaluate_pose_model(ckpt_path, cfg, device, split)
+                else:
+                    metrics = evaluate_model(ckpt_path, cfg, device, split)
                 metrics["name"] = display_name
                 results[split].append(metrics)
                 map50 = metrics.get("mAP@0.5", 0)
