@@ -1,0 +1,42 @@
+experiment:
+  name: mobilenetv4_conv_small_bilstm_opt
+  seed: 42
+data:
+  v2_root: C:/Users/ashav/Desktop/ConElGym_v2
+  train_videos: data/train/videos
+  valid_videos: data/valid/videos
+  test_videos: data/test/videos
+  train_annotations: data/train/annotations
+  valid_annotations: data/valid/annotations
+  test_annotations: data/test/annotations
+  features_dir: data/frame_features
+  frame_size: 224
+model:
+  backbone: mobilenetv4_conv_small
+  temporal_head: bilstm
+  hidden_dim: 64
+  n_layers: 3
+  dropout: 0.39279757672456206
+  freeze_backbone_epochs: 5
+training:
+  epochs: 50
+  batch_size: 1
+  chunk_size: 358
+  lr: 0.00043284502212938834
+  weight_decay: 0.0071144760093434225
+  scheduler: cosine
+  grad_clip: 1.0
+  early_stopping_patience: 10
+postprocess:
+  threshold: 0.5
+  min_duration_sec: 1.5
+  max_duration_sec: 12.0
+streaming:
+  threshold_high: 0.6
+  threshold_low: 0.3
+  patience_frames: 15
+  ema_alpha: 0.3
+  attn_window: 64
+mlflow:
+  tracking_uri: ./mlruns
+  experiment_name: ConElGym_RT

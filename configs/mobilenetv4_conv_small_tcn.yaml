@@ -1,0 +1,14 @@
+# MobileNetV4-Conv-Small + CausalTCN
+experiment:
+  name: "mobilenetv4_conv_small_tcn"
+
+model:
+  backbone: "mobilenetv4_conv_small"
+  temporal_head: "causal_tcn"
+  dropout: 0.2
+
+training:
+  epochs: 50
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  early_stopping_patience: 10
