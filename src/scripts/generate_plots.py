@@ -19,11 +19,14 @@
   Fig 14 — Phase 5: Accuracy vs Speed (все модели Phase 3+5+Pose+S3D)
   Fig 15 — Phase 5: LOAO heatmap полный (17 моделей × 4 снаряда)
   Fig 16 — Phase 5: LOAO mean bar chart (все архитектуры, threshold 0.70)
+  Fig 17 — Phase 5 MV5: EfficientNet-B0 group (valid/test mAP bars, LOAO heatmap, mAP vs LOAO scatter)
+  Fig 18 — Phase 5 MV5: MobileNetV4-Small group (valid/test mAP bars, LOAO heatmap, mAP vs size scatter)
+  Fig 19 — Phase 5 MV5: Pose group (valid/test mAP bars, LOAO heatmap, mAP vs LOAO scatter)
 
 Запуск:
     python src/scripts/generate_plots.py
 
-Выходные файлы: data/plots/results/fig{1..16}_*.png
+Выходные файлы: data/plots/results/fig{1..19}_*.png
 """
 
 from __future__ import annotations
@@ -1171,6 +1174,210 @@ def fig16_p5_loao_mean_bar() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Group comparison data (Phase 5 — MobileNetV4 experiment)
+# ---------------------------------------------------------------------------
+
+# EfficientNet-B0 group: valid=mean±std (3 seeds, phase3), test=seed42
+EFF_B0_GROUP = {
+    "BiLSTM+Att": {
+        "valid_mean": 0.830, "valid_std": 0.031, "test_map": 0.788,
+        "fps": 345, "size_mb": 26.5,
+        "loao": {"Ball": 0.720, "Clubs": 0.797, "Hoop": 0.636, "Ribbon": 0.800},
+        "loao_mean": 0.739,
+    },
+    "BiLSTM": {
+        "valid_mean": 0.827, "valid_std": 0.031, "test_map": 0.791,
+        "fps": 354, "size_mb": 25.3,
+        "loao": {"Ball": 0.707, "Clubs": 0.818, "Hoop": 0.628, "Ribbon": 0.536},
+        "loao_mean": 0.672,
+    },
+    "CausalTCN": {
+        "valid_mean": 0.763, "valid_std": 0.098, "test_map": 0.900,
+        "fps": 354, "size_mb": 22.0,
+        "loao": {"Ball": 0.303, "Clubs": 0.818, "Hoop": 0.527, "Ribbon": 0.713},
+        "loao_mean": 0.590,
+    },
+}
+
+# MobileNetV4-Conv-Small group: valid=mean±std (3 seeds), test=seed42
+MV4_GROUP = {
+    "BiLSTM+Att": {
+        "valid_mean": 0.854, "valid_std": 0.042, "test_map": 0.873,
+        "fps": 383, "size_mb": 14.7,
+        "loao": {"Ball": 0.530, "Clubs": 0.818, "Hoop": 0.660, "Ribbon": 0.170},
+        "loao_mean": 0.545,
+    },
+    "BiLSTM": {
+        "valid_mean": 0.859, "valid_std": 0.041, "test_map": 0.860,
+        "fps": 410, "size_mb": 14.5,
+        "loao": {"Ball": 0.545, "Clubs": 0.770, "Hoop": 0.780, "Ribbon": 0.234},
+        "loao_mean": 0.582,
+    },
+    "CausalTCN": {
+        "valid_mean": 0.652, "valid_std": 0.056, "test_map": 0.802,
+        "fps": 412, "size_mb": 16.2,
+        "loao": {"Ball": 0.091, "Clubs": 0.432, "Hoop": 0.567, "Ribbon": 0.030},
+        "loao_mean": 0.280,
+    },
+}
+
+# Pose group: valid=seed42 only (no multi-seed), test=seed42
+POSE_GROUP = {
+    "BiLSTM+Att": {
+        "valid_mean": 0.856, "valid_std": None, "test_map": 0.970,
+        "fps": 68, "size_mb": 1.7,
+        "loao": {"Ball": 0.989, "Clubs": 0.655, "Hoop": 1.000, "Ribbon": 1.000},
+        "loao_mean": 0.911,
+    },
+    "BiLSTM": {
+        "valid_mean": 0.994, "valid_std": None, "test_map": 0.875,
+        "fps": 68, "size_mb": 14.2,
+        "loao": {"Ball": 0.989, "Clubs": 0.903, "Hoop": 0.994, "Ribbon": 1.000},
+        "loao_mean": 0.972,
+    },
+    "CausalTCN": {
+        "valid_mean": 0.997, "valid_std": None, "test_map": 0.982,
+        "fps": 68, "size_mb": 2.8,
+        "loao": {"Ball": 0.973, "Clubs": 0.989, "Hoop": 1.000, "Ribbon": 0.909},
+        "loao_mean": 0.968,
+    },
+}
+
+_APPARATUS = ["Ball", "Clubs", "Hoop", "Ribbon"]
+
+
+def _group_figure(
+    group_data: dict,
+    title_prefix: str,
+    fig_num: int,
+    fig_name: str,
+    scatter_x: str = "loao_mean",   # "loao_mean" | "fps" | "size_mb"
+    scatter_xlabel: str = "LOAO Mean mAP@0.5",
+    valid_note: str = "mean ± std (3 seeds)",
+) -> None:
+    """Generic 2×2 figure for a backbone group comparison."""
+    heads = list(group_data.keys())
+    colors = ["#2196F3", "#FF9800", "#4CAF50"]  # blue, orange, green
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle(f"Figure {fig_num}. {title_prefix} — Backbone Group Comparison",
+                 fontsize=14, fontweight="bold", y=1.01)
+
+    # ── Panel [0,0]: Valid mAP bar ─────────────────────────────────────────
+    ax = axes[0, 0]
+    x = np.arange(len(heads))
+    vmeans = [group_data[h]["valid_mean"] for h in heads]
+    vstds  = [group_data[h]["valid_std"] or 0.0 for h in heads]
+    bars = ax.bar(x, vmeans, color=colors, alpha=0.85, edgecolor="white", width=0.5)
+    ax.errorbar(x, vmeans, yerr=vstds, fmt="none", color="black", capsize=5, linewidth=1.5)
+    for bar, v, s in zip(bars, vmeans, vstds):
+        label = f"{v:.3f}" + (f"\n±{s:.3f}" if s > 0 else "")
+        ax.text(bar.get_x() + bar.get_width() / 2, v + (s or 0) + 0.01,
+                label, ha="center", va="bottom", fontsize=9, fontweight="bold")
+    ax.set_xticks(x); ax.set_xticklabels(heads)
+    ax.set_ylabel("mAP@0.5"); ax.set_ylim(0, 1.05)
+    ax.set_title(f"Valid mAP ({valid_note})")
+    ax.axhline(0.75, color="red", linestyle="--", alpha=0.5, linewidth=1)
+
+    # ── Panel [0,1]: Test mAP bar ──────────────────────────────────────────
+    ax = axes[0, 1]
+    tmaps = [group_data[h]["test_map"] for h in heads]
+    bars = ax.bar(x, tmaps, color=colors, alpha=0.85, edgecolor="white", width=0.5)
+    for bar, v in zip(bars, tmaps):
+        ax.text(bar.get_x() + bar.get_width() / 2, v + 0.01,
+                f"{v:.3f}", ha="center", va="bottom", fontsize=9, fontweight="bold")
+    ax.set_xticks(x); ax.set_xticklabels(heads)
+    ax.set_ylabel("mAP@0.5"); ax.set_ylim(0, 1.05)
+    ax.set_title("Test mAP@0.5 (seed=42)")
+    ax.axhline(0.75, color="red", linestyle="--", alpha=0.5, linewidth=1)
+
+    # ── Panel [1,0]: LOAO heatmap ──────────────────────────────────────────
+    ax = axes[1, 0]
+    grid = np.array([[group_data[h]["loao"][a] for a in _APPARATUS] for h in heads])
+    means = np.array([group_data[h]["loao_mean"] for h in heads]).reshape(-1, 1)
+    full_grid = np.hstack([grid, means])
+    col_labels = _APPARATUS + ["Mean"]
+    im = ax.imshow(full_grid, cmap="RdYlGn", vmin=0.0, vmax=1.0, aspect="auto")
+    plt.colorbar(im, ax=ax, label="mAP@0.5", shrink=0.8)
+    ax.set_xticks(range(len(col_labels))); ax.set_xticklabels(col_labels, fontsize=10)
+    ax.set_yticks(range(len(heads))); ax.set_yticklabels(heads, fontsize=10)
+    ax.axvline(3.5, color="white", linestyle="-", linewidth=1.5, alpha=0.7)
+    for i, h in enumerate(heads):
+        for j, col in enumerate(col_labels):
+            val = full_grid[i, j]
+            txt_color = "white" if val > 0.75 or val < 0.30 else "black"
+            marker = (" [OK]" if val >= 0.70 else " [X]") if j < 4 else ""
+            ax.text(j, i, f"{val:.2f}{marker}",
+                    ha="center", va="center", fontsize=8.5,
+                    fontweight="bold", color=txt_color)
+    ax.set_title("LOAO Heatmap (criterion: all ≥ 0.70)")
+
+    # ── Panel [1,1]: Scatter (test mAP vs scatter_x) ──────────────────────
+    ax = axes[1, 1]
+    sx = [group_data[h][scatter_x] for h in heads]
+    sy = [group_data[h]["test_map"] for h in heads]
+    for xi, yi, color, label in zip(sx, sy, colors, heads):
+        ax.scatter(xi, yi, color=color, s=120, zorder=3, label=label)
+        ax.annotate(label, (xi, yi), textcoords="offset points",
+                    xytext=(6, 4), fontsize=9)
+    ax.set_xlabel(scatter_xlabel); ax.set_ylabel("Test mAP@0.5")
+    ax.set_ylim(0.5, 1.05)
+    ax.set_title(f"Test mAP vs {scatter_xlabel}")
+    ax.legend(fontsize=9)
+
+    fig.tight_layout()
+    _save(fig, fig_name)
+
+
+# ---------------------------------------------------------------------------
+# Fig 17 — EfficientNet-B0 group comparison
+# ---------------------------------------------------------------------------
+
+def fig17_eff_b0_group() -> None:
+    _group_figure(
+        EFF_B0_GROUP,
+        title_prefix="EfficientNet-B0",
+        fig_num=17,
+        fig_name="fig17_eff_b0_group.png",
+        scatter_x="loao_mean",
+        scatter_xlabel="LOAO Mean mAP@0.5",
+        valid_note="mean ± std (3 seeds)",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fig 18 — MobileNetV4-Small group comparison
+# ---------------------------------------------------------------------------
+
+def fig18_mv4_group() -> None:
+    _group_figure(
+        MV4_GROUP,
+        title_prefix="MobileNetV4-Conv-Small",
+        fig_num=18,
+        fig_name="fig18_mv4_group.png",
+        scatter_x="size_mb",
+        scatter_xlabel="Model Size (MB)",
+        valid_note="mean ± std (3 seeds)",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fig 19 — Pose group comparison
+# ---------------------------------------------------------------------------
+
+def fig19_pose_group() -> None:
+    _group_figure(
+        POSE_GROUP,
+        title_prefix="Pose (MediaPipe)",
+        fig_num=19,
+        fig_name="fig19_pose_group.png",
+        scatter_x="loao_mean",
+        scatter_xlabel="LOAO Mean mAP@0.5",
+        valid_note="seed=42 only",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1194,6 +1401,9 @@ def main() -> None:
     fig14_p5_accuracy_vs_speed()
     fig15_p5_loao_heatmap_full()
     fig16_p5_loao_mean_bar()
+    fig17_eff_b0_group()
+    fig18_mv4_group()
+    fig19_pose_group()
 
     print(f"\nDone. All figures saved to {PLOTS_DIR}")
 

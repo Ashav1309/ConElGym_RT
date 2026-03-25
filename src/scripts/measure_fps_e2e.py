@@ -59,6 +59,10 @@ MODELS = [
     ("efficientnet_b0_tcn_opt_seed42_best.pt",             "cnn",  "EffB0+TCN"),
     ("efficientnet_b0_tsm_bilstm_attn_opt_seed42_best.pt", "cnn",  "EffB0+TSM+BiLSTM+Att"),
     ("efficientnet_b0_tsm_bilstm_opt_seed42_best.pt",      "cnn",  "EffB0+TSM+BiLSTM"),
+    # CNN — MobileNetV4-Conv-Small
+    ("mobilenetv4_conv_small_bilstm_attn_opt_seed42_best.pt", "cnn", "MV4+BiLSTM+Att"),
+    ("mobilenetv4_conv_small_bilstm_opt_seed42_best.pt",      "cnn", "MV4+BiLSTM"),
+    ("mobilenetv4_conv_small_tcn_opt_seed42_best.pt",         "cnn", "MV4+TCN"),
     # Pose
     ("pose_bilstm_attn_opt_seed42_best.pt",                "pose", "Pose+BiLSTM+Att"),
     ("pose_bilstm_opt_seed42_best.pt",                     "pose", "Pose+BiLSTM"),
